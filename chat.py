@@ -3,6 +3,7 @@ import json
 import torch
 import re
 from model import NeuralNet
+from fuzzywuzzy import process
 from nltk_utils import bag_of_words, tokenize
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -25,13 +26,21 @@ model = NeuralNet(input_size, hidden_size, output_size).to(device)
 model.load_state_dict(model_state)
 model.eval()
 
+order_id = 1
+
 menu = {
-    "8 pc chicken nuggets": 4.99,
-    "vegan cheeseburger": 6.49,
-    "large fries": 2.99,
-    "medium soda": 1.99,
-    "pepperoni pizza": 9.99,
+    "bowl": 4.99,
+    "burrito": 6.49,
 }
+
+meats = ["smoked brisket", "steak", "carnitas", "chicken", "beef barbacoa", "sofritas"]
+veg_meat = ["fajita veggies"]
+
+rice = ["white rice", "brown rice", "none"]
+
+beans = ["black beans", "pinto beans"]
+
+toppings = ["guacamole", "fresh tomato salsa", "roasted chili-corn salsa", "tomatillo-green chili salsa", "tomatillo-red chili salsa", "sour cream", "fajita veggies", "cheese", "romaine lettuce", "queso blanco"]
 
 orders = []
 
@@ -39,46 +48,59 @@ bot_name = "McDonald's"
 print("Let's chat! (type 'quit' to exit)")
 
 def clean_sentence(sentence):
-    # Lowercase and remove punctuation
     sentence = sentence.lower()
     sentence = re.sub(r'[^\w\s]', '', sentence)
     return sentence
 
 def match_order(sentence, menu):
-    # Check if any menu item is present in the cleaned sentence
-    for item in menu.keys():
-        # Use regex to find full item match in the sentence
-        pattern = r"\b" + re.escape(item.lower()) + r"\b"
-        if re.search(pattern, sentence):
-            return item
+    
+    sentence = sentence.lower()
+    
+   
+    menu_items = list(menu.keys())
+    best_match, score = process.extractOne(sentence, menu_items)
+    
+    if score >= 80:
+        return best_match
     return None
 
 def remove_item_from_order(item):
-    # Find and remove the first occurrence of the item in the orders list
+    
     for i, order in enumerate(orders):
         if order["item"] == item:
             del orders[i]
             return True
     return False
 
-def extract_quantity(sentence):
-    # Find the first number (quantity) in the user's sentence
-    match = re.search(r'\b\d+\b', sentence)
+def extract_quantity_part(part):
+    match = re.search(r'\b\d+\b', part)
     if match:
         return int(match.group())
-    return 1  # Default to 1 if no number is found
+    return 1  
 
 def process_order_part(order_part, menu):
-    """Processes a part of the order (e.g., '3 vegan cheeseburgers') and adds it to orders."""
-    quantity = extract_quantity(order_part)  # Extract quantity from the part
-    item = match_order(order_part, menu)  # Match item
+    quantity = extract_quantity_part(order_part)
+    item = match_order(order_part, menu)
+    global order_id
+    
     if item:
         price = menu[item]
         for _ in range(quantity):
-            orders.append({"item": item, "price": price})  # Add item multiple times
+            orders.append({"id": order_id, "item": item, "price": price})
+            order_id += 1
         return f"Added {quantity} {item}(s)"
     else:
         return f"Sorry, we don't have that item."
+
+def process_order(sentence):
+    order_parts = re.split(r',\s*|\s+and\s+|\s*,\s*', sentence)
+    responses = []
+
+    for part in order_parts:
+        response = process_order_part(part, menu)
+        responses.append(response)
+
+    return ' and '.join(responses)
 
 while True:
     sentence = input("You: ")
@@ -103,17 +125,11 @@ while True:
         for intent in intents['intents']:
             if tag == intent["tag"]:
                 if tag == "order":
-                    item = match_order(cleaned_sentence, menu)
-                    order_parts = re.split(r',\s(?:and)\s|\s(?:and)\s|,', cleaned_sentence)
-                    responses = []
+                    
+                    response = process_order(cleaned_sentence)
 
-                    # Process each part of the order
-                    for part in order_parts:
-                        response = process_order_part(part, menu)
-                        responses.append(response)
-
-                    # Combine responses and show the updated order list
-                    print(f"{bot_name}: {' and '.join(responses)}")
+                    
+                    print(f"{bot_name}: {response}")
                     print(f"Current orders: {orders}")
                 elif tag == "remove":
                     item = match_order(cleaned_sentence, menu)
