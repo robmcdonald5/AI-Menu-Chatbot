@@ -1,0 +1,26 @@
+name: Deploy to Heroku
+
+on:
+  push:
+    branches:
+      - main  # Deploys when changes are pushed to `main`
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up Heroku
+      run: |
+        curl https://cli-assets.heroku.com/install.sh | sh
+
+    - name: Log in to Heroku
+      env:
+        HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+      run: heroku auth:token
+
+    - name: Deploy to Heroku
+      run: git push https://heroku:$HEROKU_API_KEY@git.heroku.com/${{ secrets.HEROKU_APP_NAME }}.git main
