@@ -21,7 +21,7 @@ RUN pip install -r requirements.txt
 RUN python -m nltk.downloader punkt
 
 # Step 7: Expose the port on which your application runs (if using a web interface)
-EXPOSE 5000  # Adjust this if needed
+EXPOSE 5000
 
 # Step 8: Run the application
 CMD ["python", "app.py"]  # Adjust this command to match your entry point
