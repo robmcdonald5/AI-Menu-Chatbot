@@ -1,30 +1,22 @@
-name: Deploy to Heroku
+name: CI Pipeline
 
 on:
   push:
     branches:
-      - main  # or master if you're using master as the main branch
+      - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-
     steps:
-    # Step 1: Check out the code from the repository
     - name: Checkout code
       uses: actions/checkout@v2
 
-    # Step 2: Set up the Heroku CLI to interact with Heroku
-    - name: Set up Heroku
-      run: |
-        curl https://cli-assets.heroku.com/install.sh | sh
+    - name: Install dependencies
+      run: npm install
 
-    # Step 3: Log in to Heroku using the API key from the secrets
-    - name: Log in to Heroku
-      env:
-        HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
-      run: heroku auth:token
-
-    # Step 4: Deploy to Heroku using Git
-    - name: Deploy to Heroku
-      run: git push https://heroku:$HEROKU_API_KEY@git.heroku.com/${{ secrets.HEROKU_APP_NAME }}.git main
+    - name: Run tests
+      run: npm test
