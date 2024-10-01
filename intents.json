@@ -29,7 +29,7 @@
       },
       {
         "tag": "order",
-        "patterns": ["I'd like a", "Can I get a", "I want a", "Give me a", "I'd like to order a", "I want to order a", "Can I order a", "Can I have", "Could I get a", "I'd like to have"],
+        "patterns": ["I'd like a", "Can I get a", "I want a", "Give me a", "I'd like to order a", "I want to order a", "Can I order a", "Can I have", "Could I get a", "I'd like to have", "Can I have"],
         "responses": ["Got it! I've added {item} to your order.", "Adding {item} to your cart.", "Sure! {item} is added."]
       },
       {
