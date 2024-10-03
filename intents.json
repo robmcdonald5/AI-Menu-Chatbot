@@ -1,76 +1,66 @@
 {
-    "intents": [
-      {
-        "tag": "greeting",
-        "patterns": [
-          "Hi",
-          "Hey",
-          "How are you",
-          "Is anyone there?",
-          "Hello",
-          "Good day"
-        ],
-        "responses": [
-          "Hey :-)",
-          "Hello, thanks for visiting",
-          "Hi there, what can I do for you?",
-          "Hi there, how can I help?"
-        ]
-      },
-      {
-        "tag": "goodbye",
-        "patterns": ["Bye", "See you later", "Goodbye"],
-        "responses": [
-          "Delete",
-          "See you later, thanks for visiting",
-          "Have a nice day",
-          "Bye! Come back again soon."
-        ]
-      },
-      {
-        "tag": "order",
-        "patterns": ["I'd like a", "Can I get a", "I want a", "Give me a", "I'd like to order a", "I want to order a", "Can I order a", "Can I have", "Could I get a", "I'd like to have", "Can I have"],
-        "responses": ["Got it! I've added {item} to your order.", "Adding {item} to your cart.", "Sure! {item} is added."]
-      },
-      {
-        "tag": "remove",
-        "patterns": [
-          "Could you remove",
-          "Please remove",
-          "Take out",
-          "Remove",
-          "Can you remove",
-          "Get rid of"
-        ],
-        "responses": [
-          "I've removed {item} from your order.",
-          "{item} has been removed from your cart.",
-          "Sure, I took {item} off your order."
-        ]
-      },
-      {
-        "tag": "thanks",
-        "patterns": ["Thanks", "Thank you", "That's helpful", "Thank's a lot!"],
-        "responses": ["Happy to help!", "Any time!", "My pleasure"]
-      },
-      {
-        "tag": "menu",
-        "patterns": [
-          "Which food items do you have?",
-          "What kinds of foods are there?",
-          "What do you sell?",
-          "What is on the menu?",
-          "Can you show me the menu",
-          "I want to see the menu",
-          "Show the menu",
-          "Display menu",
-          "menu",
-          "food items"
-        ],
-        "responses": [
-          "We sell coffee and tea",
-          "We have coffee and tea"
-        ]
-      }
-    ]
-  }
+  "intents": [
+    {
+      "tag": "greeting",
+      "representative_sentence": "Hello",
+      "responses": [
+        "Hey :-)",
+        "Hello, thanks for visiting",
+        "Hi there, what can I do for you?",
+        "Hi there, how can I help?"
+      ]
+    },
+    {
+      "tag": "goodbye",
+      "representative_sentence": "Goodbye",
+      "responses": [
+        "See you later, thanks for visiting",
+        "Have a nice day",
+        "Bye! Come back again soon."
+      ]
+    },
+    {
+      "tag": "order",
+      "representative_sentence": "I want to order food",
+      "responses": [
+        "Got it! I've added the item to your order.",
+        "Adding item to your cart.",
+        "Sure! Item is added."
+      ]
+    },
+    {
+      "tag": "remove",
+      "representative_sentence": "Please remove an item",
+      "responses": [
+        "I've removed the item from your order.",
+        "Item has been removed from your cart.",
+        "Sure, I took the item off your order."
+      ]
+    },
+    {
+      "tag": "thanks",
+      "representative_sentence": "Thank you",
+      "responses": [
+        "Happy to help!",
+        "Any time!",
+        "My pleasure"
+      ]
+    },
+    {
+      "tag": "menu",
+      "representative_sentence": "Show me the menu",
+      "responses": [
+        "We sell burritos and bowls",
+        "We have burritos and bowls"
+      ]
+    },
+    {
+      "tag": "check_order",
+      "representative_sentence": "What is my current order",
+      "responses": [
+        "Here is your current order:",
+        "These are the items in your order:"
+      ]
+    }
+  ]
+}
