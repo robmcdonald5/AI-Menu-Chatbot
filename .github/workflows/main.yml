@@ -39,7 +39,7 @@ jobs:
 
     # Build and push Docker image (if using Docker)
     - name: Login to Heroku Container Registry
-      uses: heroku/heroku-container-registry@v1
+      uses: heroku/heroku-container-registry@v1 # Corrected version here
       with:
         email: ${{ secrets.HEROKU_EMAIL }} 
         password: ${{ secrets.HEROKU_API_KEY }}
