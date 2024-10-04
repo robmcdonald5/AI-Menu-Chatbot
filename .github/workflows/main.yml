@@ -54,3 +54,11 @@ jobs:
         HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
       run: |
         heroku container:release web --app ${{ secrets.HEROKU_APP_NAME }}
+
+    # Upload npm logs if the job fails
+    - name: Upload npm logs
+      if: failure() # Only upload if the build fails
+      uses: actions/upload-artifact@v2
+      with:
+        name: npm-logs
+        path: /home/runner/.npm/_logs/
