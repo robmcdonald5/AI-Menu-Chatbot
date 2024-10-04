@@ -16,10 +16,24 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v2
 
-    - name: Install dependencies
+    # Set up Node.js environment for JavaScript/React
+    - name: Set up Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: '16'  # Specify your Node.js version
+
+    - name: Install Node.js dependencies
       run: npm install
-      working-directory: ./AI-Menu-Chatbot  # Adjust to your actual project directory if needed
+      working-directory: ./AI-Menu-Chatbot  # Adjust to your project path if needed
+
+    # Set up Python environment for backend
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.12'  # Specify your Python version
+
+    - name: Install Python dependencies
+      run: pip install -r requirements.txt
 
     - name: Run tests
-      run: npm test
-      working-directory: ./AI-Menu-Chatbot  # Adjust to your actual project directory if needed
+      run: npm test && pytest  # Adjust test commands as needed for both environments
