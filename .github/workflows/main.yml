@@ -24,7 +24,8 @@ jobs:
 
     - name: Install Node.js dependencies
       run: npm install
-      working-directory: ./AI-Menu-Chatbot  # Adjust to your project path if needed
+      # Remove or correct the working-directory
+      # working-directory: ./AI-Menu-Chatbot
 
     # Set up Python environment for backend
     - name: Set up Python
