@@ -20,21 +20,34 @@ jobs:
     - name: Set up Node.js
       uses: actions/setup-node@v2
       with:
-        node-version: '16'  # Specify your Node.js version
+        node-version: '16' 
 
     - name: Install Node.js dependencies
       run: npm install
-      # Remove or correct the working-directory
-      # working-directory: ./AI-Menu-Chatbot
 
     # Set up Python environment for backend
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
-        python-version: '3.12'  # Specify your Python version
+        python-version: '3.12'
 
     - name: Install Python dependencies
       run: pip install -r requirements.txt
 
     - name: Run tests
-      run: npm test && pytest  # Adjust test commands as needed for both environments
+      run: npm test && pytest 
+
+    # Build and push Docker image (if using Docker)
+    - name: Login to Heroku Container Registry
+      uses: heroku/heroku-container-registry@v1
+      with:
+        email: ${{ secrets.HEROKU_EMAIL }} 
+        password: ${{ secrets.HEROKU_API_KEY }}
+
+    - name: Build and push
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        file: ./Dockerfile
+        push: true
+        tags: registry.heroku.com/${{ secrets.HEROKU_APP_NAME }}/web
