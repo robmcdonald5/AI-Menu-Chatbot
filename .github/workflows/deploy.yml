@@ -31,6 +31,4 @@ jobs:
         HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
         HEROKU_APP_NAME: ${{ secrets.HEROKU_APP_NAME }}
       run: |
-        docker run --rm --name deploy -e HEROKU_API_KEY=${{ secrets.HEROKU_API_KEY }} \
-          -e HEROKU_APP_NAME=${{ secrets.HEROKU_APP_NAME }} \
-          stevegt/heroku-docker-deploy
+        heroku container:release web --app ${{ secrets.HEROKU_APP_NAME }}
