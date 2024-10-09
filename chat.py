@@ -198,6 +198,96 @@ def display_current_order():
     else:
         print(f"{bot_name}: Your order is currently empty.")
 
+def extract_order_ids(input_sentence):
+    doc = nlp(input_sentence)
+    order_ids = []
+    for ent in doc.ents:
+        if ent.label_ == 'CARDINAL':
+            try:
+                order_ids.append(int(ent.text))
+            except ValueError:
+                order_ids.append(text2int(ent.text))
+    return order_ids
+
+def remove_items_by_ids(order_ids):
+    global orders
+    global order_id
+    removed_items = []
+    for order_id in order_ids:
+        for i, order in enumerate(orders):
+            if order["id"] == order_id:
+                removed_items.append(order["item"])
+                del orders[i]
+                break
+    for index, order in enumerate(orders):
+        order["id"] = index + 1
+        
+    order_id = len(orders) +1
+    return removed_items
+
+def extract_features(input_sentence):
+    doc = nlp(input_sentence)
+    features = {
+        "item": None,
+        "meats": [],
+        "rice": [],
+        "beans": [],
+        "toppings": []
+    }
+
+    # Extract items
+    for token in doc:
+        if token.lemma_ in menu:
+            features["item"] = token.lemma_
+
+    # Extract addons
+    doc_text = doc.text.lower()
+    for meat in meats:
+        if meat in doc_text:
+            features["meats"].append(meat)
+    for rice_type in rice:
+        if rice_type in doc_text:
+            features["rice"].append(rice_type)
+    for bean in beans:
+        if bean in doc_text:
+            features["beans"].append(bean)
+    for topping in toppings:
+        if topping in doc_text:
+            features["toppings"].append(topping)
+
+    return features
+
+def remove_items_by_features(features):
+    global orders
+    removed_items = []
+    new_orders = []
+
+    for order in orders:
+        match = True
+        if features["item"] and order["item"] != features["item"]:
+            match = False
+        if features["meats"] and not any(meat in order["meats"] for meat in features["meats"]):
+            match = False
+        if features["rice"] and not any(rice in order["rice"] for rice in features["rice"]):
+            match = False
+        if features["beans"] and not any(bean in order["beans"] for bean in features["beans"]):
+            match = False
+        if features["toppings"] and not any(topping in order["toppings"] for topping in features["toppings"]):
+            match = False
+
+        if match:
+            removed_items.append(order["item"])
+        else:
+            new_orders.append(order)
+
+    orders = new_orders
+
+    # Update the IDs of the remaining orders
+    for index, order in enumerate(orders):
+        order["id"] = index + 1
+
+    return removed_items
+
 while True:
     sentence = input("You: ")
     if sentence == "quit":
@@ -257,18 +347,29 @@ while True:
                         print(f"[DEBUG] Current orders: {orders}")
                     check_missing_fields()
 
-                elif predicted_tag == "remove":
-                    # Similar processing for remove intent
-                    item = extract_item_spacy(cleaned_sentence)
-                    if item:
-                        if remove_item_from_order(item):
-                            print(f"{bot_name}: I've removed {item} from your order.")
+                elif predicted_tag == "remove_id":
+                    order_ids = extract_order_ids(cleaned_sentence)
+                    if order_ids:
+                        removed_items = remove_items_by_ids(order_ids)
+                        if removed_items:
+                            
                             if DEBUG:
                                 print(f"[DEBUG] Current orders: {orders}")
                         else:
-                            print(f"{bot_name}: I'm sorry, I don't think {item} is on the list.")
+                            print(f"{bot_name}: I couldn't find any items with the specified IDs.")
                     else:
-                        print(f"{bot_name}: I'm sorry, I don't think the item you entered is on the menu.")
+                        print(f"{bot_name}: I couldn't detect any order IDs in your request.")
+
+                elif predicted_tag == "remove_desc":
+                    # Extract features and remove items based on features
+                    features = extract_features(cleaned_sentence)
+                    removed_items = remove_items_by_features(features)
+                    if removed_items:
+                        print(f"{bot_name}: I've removed the following items from your order: {', '.join(removed_items)}.")
+                        if DEBUG:
+                            print(f"[DEBUG] Current orders: {orders}")
+                    else:
+                        print(f"{bot_name}: I couldn't find any items matching the specified features.")
 
                 elif predicted_tag == "check_order":
                     # Display the current order

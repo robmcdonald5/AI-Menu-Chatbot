@@ -29,8 +29,17 @@
       ]
     },
     {
-      "tag": "remove",
-      "representative_sentence": "Please remove an item",
+      "tag": "remove_id",
+      "representative_sentence": "Please remove item 1",
+      "responses": [
+        "I've removed the item from your order.",
+        "Item has been removed from your cart.",
+        "Sure, I took the item off your order."
+      ]
+    },
+    {
+      "tag": "remove_desc",
+      "representative_sentence": "Please remove all items with toppings",
       "responses": [
         "I've removed the item from your order.",
         "Item has been removed from your cart.",
@@ -60,6 +69,20 @@
       "responses": [
         "Here is your current order:",
         "These are the items in your order:"
+      ]
+    },
+    {
+      "tag": "vegan",
+      "representative_sentence": "What is the vegan option for meat",
+      "responses": [
+        "There is fajita veggies oppions"
+      ]
+    },
+    {
+      "tag": "checkout",
+      "representative_sentence": "Finished ordering",
+      "responses": [
+        "Alright! I'll get your order ready. Please fill the payment transaction"
       ]
     }
   ]
