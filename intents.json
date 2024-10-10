@@ -29,7 +29,7 @@
       ]
     },
     {
-      "tag": "remove_id",
+      "tag": "remove",
       "representative_sentence": "Please remove item 1",
       "responses": [
         "I've removed the item from your order.",
@@ -46,6 +46,7 @@
         "Sure, I took the item off your order."
       ]
     },
+
     {
       "tag": "thanks",
       "representative_sentence": "Thank you",

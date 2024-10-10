@@ -38,7 +38,9 @@ menu = {
 meats = ["smoked brisket", "steak", "carnitas", "chicken", "beef barbacoa", "sofritas", "fajita veggies"]
 rice = ["white rice", "brown rice", "none"]
 beans = ["black beans", "pinto beans", "none"]
-toppings = ["guacamole", "fresh tomato salsa", "roasted chili-corn salsa", "tomatillo-green chili salsa", "tomatillo-red chili salsa", "sour cream", "fajita veggies", "cheese", "romaine lettuce", "queso blanco", "none"]
+toppings = ["guacamole", "fresh tomato salsa", "roasted chili-corn salsa", "tomatillo-green chili salsa",
+            "tomatillo-red chili salsa", "sour cream", "fajita veggies", "cheese", "romaine lettuce",
+            "queso blanco", "none"]
 
 addons_list = meats + rice + beans + toppings
 
@@ -61,37 +63,39 @@ def clean_sentence(sentence):
     sentence = re.sub(r'[^\w\s]', '', sentence)
     return sentence
 
-def remove_item_from_order(item):
+def remove_item_from_order(order_id):
     global orders
     for i, order in enumerate(orders):
-        if order["item"] == item:
+        if order["id"] == order_id:
             del orders[i]
+            # Update order IDs
+            for index, order in enumerate(orders):
+                order["id"] = index + 1
             return True
     return False
 
 def check_missing_fields():
+    global is_fixing
     for order in orders:
         for field in ["meats", "rice", "beans", "toppings"]:
             if order[field] == "":
                 missing_field_context["order_id"] = order["id"]
                 missing_field_context["field"] = field
                 prompt_user_for_missing_field(order["id"], field)
+                is_fixing = True
                 return  # Stop after finding the first missing field
+    is_fixing = False  # No missing fields left
 
 def prompt_user_for_missing_field(order_id, field):
-    global is_fixing
-    is_fixing = True
     print(f"{bot_name}: For order {order_id}, {field_prompts[field]}")
 
 def update_order(order_id, field, value):
-    global is_fixing
     for order in orders:
         if order["id"] == order_id:
             order[field] = value
             print(f"{bot_name}: Updated order {order_id} with {field}: {value}")
             break
     missing_field_context.clear()
-    is_fixing = False
     check_missing_fields()  # Check if there are more missing fields
 
 def text2int(textnum):
@@ -211,18 +215,16 @@ def extract_order_ids(input_sentence):
 
 def remove_items_by_ids(order_ids):
     global orders
-    global order_id
     removed_items = []
-    for order_id in order_ids:
+    for oid in order_ids:
         for i, order in enumerate(orders):
-            if order["id"] == order_id:
-                removed_items.append(order["item"])
+            if order["id"] == oid:
+                removed_items.append(f"{order['item']} (Order ID {oid})")
                 del orders[i]
                 break
+    # Update the IDs of the remaining orders
     for index, order in enumerate(orders):
         order["id"] = index + 1
-        
-    order_id = len(orders) +1
     return removed_items
 
 def extract_features(input_sentence):
@@ -276,7 +278,7 @@ def remove_items_by_features(features):
             match = False
 
         if match:
-            removed_items.append(order["item"])
+            removed_items.append(f"{order['item']} (Order ID {order['id']})") # More verbose update added
         else:
             new_orders.append(order)
 
@@ -299,6 +301,7 @@ while True:
     if DEBUG:
         print(f"[DEBUG] Cleaned sentence: {cleaned_sentence}")
 
+    # If fixing, first try to extract the missing field value
     if is_fixing:
         # User is providing missing field info
         order_id_fix = missing_field_context["order_id"]
@@ -354,7 +357,7 @@ while True:
                     if order_ids:
                         removed_items = remove_items_by_ids(order_ids)
                         if removed_items:
-                            
+                            print(f"{bot_name}: I've removed the following items from your order: {', '.join(removed_items)}.")
                             if DEBUG:
                                 print(f"[DEBUG] Current orders: {orders}")
                         else:
@@ -377,6 +380,10 @@ while True:
                     # Display the current order
                     display_current_order()
                     alternate_command = True
+
+                elif predicted_tag == "modify_order":
+                    # Modification logic probably goes here
+                    print(f"{bot_name}: {random.choice(intent['responses'])}")
 
                 else:
                     if not is_fixing:
