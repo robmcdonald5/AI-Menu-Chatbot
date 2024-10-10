@@ -3,8 +3,11 @@ import json
 import torch
 import re
 import spacy
+import numpy as np
+from sklearn.cluster import KMeans
 from spacy.matcher import PhraseMatcher
 from sentence_transformers import SentenceTransformer, util
+from collections import Counter
 
 # Load SpaCy model and Sentence-BERT model
 nlp = spacy.load('en_core_web_sm')
@@ -14,19 +17,48 @@ sentence_model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
 # Toggleable debug mode
 DEBUG = True  # Set to True to enable debug output
 
+# For visual clarity keep this function high in the stack
+def clean_sentence(sentence):
+    sentence = sentence.lower()
+    sentence = re.sub(r'[^\w\s]', '', sentence)
+    return sentence
+
 with open('intents.json', 'r') as f:
     intents = json.load(f)
 
 # Precompute intent embeddings
-intent_sentences = []
-intent_tags = []
+all_patterns = []
+pattern_tags = []
 
+# Pattern intent recog main loop
 for intent in intents['intents']:
-    intent_tags.append(intent['tag'])
-    sentence = intent['representative_sentence']
-    intent_sentences.append(sentence)
+    tag = intent['tag']
+    patterns = intent['patterns']
+    for pattern in patterns:
+        cleaned_pattern = clean_sentence(pattern)
+        all_patterns.append(cleaned_pattern)
+        pattern_tags.append(tag)
 
-intent_embeddings = sentence_model.encode(intent_sentences, convert_to_tensor=True)
+# Compute embeddings for all patterns
+pattern_embeddings = sentence_model.encode(all_patterns)
+
+# Apply KMeans clustering
+num_clusters = len(set(pattern_tags))
+kmeans = KMeans(n_clusters=num_clusters, random_state=42)
+kmeans.fit(pattern_embeddings)
+
+# Map clusters to intents
+cluster_labels = kmeans.labels_
+cluster_to_intent = {}
+
+for cluster_id in range(num_clusters):
+    indices = np.where(cluster_labels == cluster_id)[0]
+    cluster_intents = [pattern_tags[i] for i in indices]
+    most_common_intent = Counter(cluster_intents).most_common(1)[0][0]
+    cluster_to_intent[cluster_id] = most_common_intent
+
+if DEBUG:
+    print(f"[DEBUG] Cluster to Intent Mapping: {cluster_to_intent}")
 
 order_id = 1
 is_fixing = False
@@ -58,11 +90,6 @@ field_prompts = {
 
 bot_name = "Chipotle"
 print("Let's chat! (type 'quit' to exit)")
-
-def clean_sentence(sentence):
-    sentence = sentence.lower()
-    sentence = re.sub(r'[^\w\s]', '', sentence)
-    return sentence
 
 def remove_item_from_order(order_id):
     global orders
@@ -291,6 +318,13 @@ def remove_items_by_features(features):
 
     return removed_items
 
+def predict_intent_with_clustering(user_input):
+    cleaned_input = clean_sentence(user_input)
+    input_embedding = sentence_model.encode([cleaned_input])
+    cluster_id = kmeans.predict(input_embedding)[0]
+    predicted_intent = cluster_to_intent.get(cluster_id, None)
+    return predicted_intent
+
 while True:
     sentence = input("You: ")
     if sentence == "quit":
@@ -321,44 +355,28 @@ while True:
                 field = missing_field_context["field"]
                 print(f"{bot_name}: {field_prompts[field]}")
             continue
-        else:
+        else: # not certain this is necesary, may cause a bug or prevent one lol? replace with exception block eventually
             # If value not found, proceed to process intents
             pass
 
-    # Compute embedding
-    input_embedding = sentence_model.encode(cleaned_sentence, convert_to_tensor=True)
+    # Compute embedding with clustering
+    predicted_tag = predict_intent_with_clustering(sentence)
 
     if DEBUG:
-        print(f"[DEBUG] Input embedding shape: {input_embedding.shape}")
+        print(f"[DEBUG] Input embedding shape: {predicted_tag}")
 
-    # Compute cosine similarities
-    similarities = util.pytorch_cos_sim(input_embedding, intent_embeddings)[0]
-
-    if DEBUG:
-        print(f"[DEBUG] Similarities: {similarities}")
-
-    # Find the intent with the highest similarity
-    max_sim_index = torch.argmax(similarities).item()
-    max_sim_score = similarities[max_sim_index].item()
-    predicted_tag = intent_tags[max_sim_index]
-
-    if DEBUG:
-        print(f"[DEBUG] Predicted tag: {predicted_tag}, Score: {max_sim_score}")
-
-    if max_sim_score > 0.5:  # Threshold can be adjusted
-        # Proceed with predicted_tag
+    if predicted_tag:
         for intent in intents['intents']:
             if predicted_tag == intent["tag"]:
                 if predicted_tag == "order":
-                    # Process the order using SpaCy for slot filling
-                    response = process_order_spacy(cleaned_sentence)
+                    response = process_order_spacy(sentence)
                     print(f"{bot_name}: {response}")
                     if DEBUG:
                         print(f"[DEBUG] Current orders: {orders}")
                     check_missing_fields()
 
                 elif predicted_tag == "remove_id":
-                    order_ids = extract_order_ids(cleaned_sentence)
+                    order_ids = extract_order_ids(sentence)
                     if order_ids:
                         removed_items = remove_items_by_ids(order_ids)
                         if removed_items:
@@ -372,7 +390,7 @@ while True:
 
                 elif predicted_tag == "remove_desc":
                     # Extract features and remove items based on features
-                    features = extract_features(cleaned_sentence)
+                    features = extract_features(sentence)
                     removed_items = remove_items_by_features(features)
                     if removed_items:
                         print(f"{bot_name}: I've removed the following items from your order: {', '.join(removed_items)}.")
@@ -386,8 +404,9 @@ while True:
                     display_current_order()
 
                 elif predicted_tag == "modify_order":
-                    # Modification logic probably goes here
+                    # Implement modification logic here
                     print(f"{bot_name}: {random.choice(intent['responses'])}")
+                    # Modification code would go here
 
                 else:
                     print(f"{bot_name}: {random.choice(intent['responses'])}")
@@ -397,7 +416,6 @@ while True:
                     order_id_fix = missing_field_context["order_id"]
                     field = missing_field_context["field"]
                     print(f"{bot_name}: {field_prompts[field]}")
-                continue  # Proceed to next iteration
-
+                break
     else:
         print(f"{bot_name}: I do not understand...")
