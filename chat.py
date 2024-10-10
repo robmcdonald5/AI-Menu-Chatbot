@@ -290,6 +290,7 @@ def remove_items_by_features(features):
 
 while True:
     sentence = input("You: ")
+    alternate_command = False
     if sentence == "quit":
         break
 
@@ -304,16 +305,17 @@ while True:
         field = missing_field_context["field"]
 
         # Extract the value using the updated function
-        value = extract_field_value(field, cleaned_sentence)
+        fixing_value = extract_field_value(field, cleaned_sentence)
 
         if DEBUG:
-            print(f"[DEBUG] Extracted value: {value}")
+            print(f"[DEBUG] Extracted value: {fixing_value}")
 
-        if value:
-            update_order(order_id_fix, field, value)
-        else:
-            print(f"{bot_name}: Sorry, I didn't understand. {field_prompts[field]}")
-        continue
+        if fixing_value:
+            update_order(order_id_fix, field, fixing_value)
+            continue
+        
+            
+       
 
     # Compute embedding
     input_embedding = sentence_model.encode(cleaned_sentence, convert_to_tensor=True)
@@ -339,7 +341,7 @@ while True:
         # Proceed with predicted_tag
         for intent in intents['intents']:
             if predicted_tag == intent["tag"]:
-                if predicted_tag == "order":
+                if predicted_tag == "order" and not is_fixing:
                     # Process the order using SpaCy for slot filling
                     response = process_order_spacy(cleaned_sentence)
                     print(f"{bot_name}: {response}")
@@ -347,7 +349,7 @@ while True:
                         print(f"[DEBUG] Current orders: {orders}")
                     check_missing_fields()
 
-                elif predicted_tag == "remove_id":
+                elif predicted_tag == "remove_id" and not is_fixing:
                     order_ids = extract_order_ids(cleaned_sentence)
                     if order_ids:
                         removed_items = remove_items_by_ids(order_ids)
@@ -360,7 +362,7 @@ while True:
                     else:
                         print(f"{bot_name}: I couldn't detect any order IDs in your request.")
 
-                elif predicted_tag == "remove_desc":
+                elif predicted_tag == "remove_desc" and not is_fixing:
                     # Extract features and remove items based on features
                     features = extract_features(cleaned_sentence)
                     removed_items = remove_items_by_features(features)
@@ -374,8 +376,19 @@ while True:
                 elif predicted_tag == "check_order":
                     # Display the current order
                     display_current_order()
+                    alternate_command = True
 
                 else:
-                    print(f"{bot_name}: {random.choice(intent['responses'])}")
+                    if not is_fixing:
+                        print(f"{bot_name}: {random.choice(intent['responses'])}")
     else:
-        print(f"{bot_name}: I do not understand...")
+        if not is_fixing:
+            print(f"{bot_name}: I do not understand...")
+
+    # if is_fixing:
+    #     if alternate_command:
+    #         print(f"{bot_name}: {field_prompts[field]}")
+    #     else:
+    #         print(f"{bot_name}: Sorry, I didn't understand. {field_prompts[field]}")
+
+   
