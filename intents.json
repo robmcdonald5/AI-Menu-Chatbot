@@ -183,11 +183,17 @@
         "That's all I want",
         "I'm ready to checkout",
         "Proceed to payment",
-        "Let's finish up"
+        "Let's finish up",
+        "No, that should be it",
+        "Yes, that's all good",
+        "Yes, that's perfect",
+        "Yes, that's everything",
+        "No, that's all",
+        "That will be all, thanks"
       ],
       "responses": [
-        "Alright! I'll get your order ready. Please proceed to payment.",
-        "Your order is complete. Please continue to payment."
+        "Alright! I'll get your order ready.",
+        "Your order is complete."
       ]
     }
   ]
