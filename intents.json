@@ -3,9 +3,6 @@
     {
       "tag": "greeting",
       "patterns": [
-        "Hello",
-        "Hi",
-        "Hey",
         "Good morning",
         "Good afternoon",
         "Good evening",

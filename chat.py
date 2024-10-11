@@ -15,7 +15,7 @@ nlp = spacy.load('en_core_web_sm')
 sentence_model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
 
 # Toggleable debug mode
-DEBUG = True  # Set to True to enable debug output
+DEBUG = False  # Set to True to enable debug output
 
 # For visual clarity keep this function high in the stack
 def clean_sentence(sentence):
@@ -68,12 +68,12 @@ menu = {
     "burrito": 6.49,
 }
 
-meats = ["smoked brisket", "steak", "carnitas", "chicken", "beef barbacoa", "sofritas", "fajita veggies"]
-rice = ["white rice", "brown rice", "none"]
+meats = ["smoked brisket", "steak", "carnitas", "chicken", "barbacoa", "sofritas", "pollo asado", "fajita veggies"]
+rice = ["white rice", "brown rice", "cauliflower rice", "none"]
 beans = ["black beans", "pinto beans", "none"]
-toppings = ["guacamole", "fresh tomato salsa", "roasted chili-corn salsa", "tomatillo-green chili salsa",
-            "tomatillo-red chili salsa", "sour cream", "fajita veggies", "cheese", "romaine lettuce",
-            "queso blanco", "none"]
+toppings = ["guacamole", "tomato salsa", "chili corn salsa",
+            "tomatillo green chili salsa", "tomatillo red chili salsa", "sour cream",
+            "fajita veggies", "cheese", "romaine lettuce", "queso blanco", "none"]
 
 addons_list = meats + rice + beans + toppings
 
@@ -89,7 +89,7 @@ field_prompts = {
 }
 
 bot_name = "Chipotle"
-print("Let's chat! (type 'quit' to exit)")
+print("Hi I am an automated Chipotle AI menu, what would you like to order! (type 'quit' to exit)")
 
 def remove_item_from_order(order_id):
     global orders
