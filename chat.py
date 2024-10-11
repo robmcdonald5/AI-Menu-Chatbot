@@ -106,7 +106,7 @@ def check_missing_fields():
     global is_fixing
     for order in orders:
         for field in ["meats", "rice", "beans", "toppings"]:
-            if order[field] == "":
+            if not order[field]:  # Checks if the list is empty
                 missing_field_context["order_id"] = order["id"]
                 missing_field_context["field"] = field
                 prompt_user_for_missing_field(order["id"], field)
@@ -179,10 +179,10 @@ def process_order_spacy(input_sentence):
                     "id": order_id,
                     "item": item,
                     "price": price,
-                    "meats": meats_op if meats_op else "",
-                    "rice": rice_op if rice_op else "",
-                    "beans": beans_op if beans_op else "",
-                    "toppings": toppings_op if toppings_op else ""
+                    "meats": meats_op if meats_op else [],
+                    "rice": rice_op if rice_op else [],
+                    "beans": beans_op if beans_op else [],
+                    "toppings": toppings_op if toppings_op else []
                 })
                 order_id += 1
         return f"Added {quantity} {', '.join(items)} to your order."
@@ -215,10 +215,12 @@ def extract_field_value(field, user_input):
     doc = nlp(user_input)
     matches = matcher(doc)
     if matches:
-        # Return the first matching phrase
-        match_id, start, end = matches[0]
-        span = doc[start:end]
-        return span.text.lower()
+        # Collect all matching phrases
+        values = set()
+        for match_id, start, end in matches:
+            span = doc[start:end]
+            values.add(span.text.lower())
+        return list(values)
     else:
         return None
 
@@ -226,7 +228,11 @@ def display_current_order():
     if orders:
         print(f"{bot_name}: Here is your current order:")
         for order in orders:
-            print(f"Order ID: {order['id']}, Item: {order['item']}, Meats: {order['meats']}, Rice: {order['rice']}, Beans: {order['beans']}, Toppings: {order['toppings']}")
+            meats = ', '.join(order['meats']) if order['meats'] else 'None'
+            rice = ', '.join(order['rice']) if order['rice'] else 'None'
+            beans = ', '.join(order['beans']) if order['beans'] else 'None'
+            toppings = ', '.join(order['toppings']) if order['toppings'] else 'None'
+            print(f"Order ID: {order['id']}, Item: {order['item']}, Meats: {meats}, Rice: {rice}, Beans: {beans}, Toppings: {toppings}")
     else:
         print(f"{bot_name}: Your order is currently empty.")
 
