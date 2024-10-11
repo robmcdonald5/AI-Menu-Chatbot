@@ -113,6 +113,7 @@ def check_missing_fields():
                 is_fixing = True
                 return  # Stop after finding the first missing field
     is_fixing = False  # No missing fields left
+    print(f"{bot_name}: Anything else I can help with?")
 
 def prompt_user_for_missing_field(order_id, field):
     print(f"{bot_name}: For order {order_id}, {field_prompts[field]}")
@@ -331,6 +332,8 @@ def predict_intent_with_clustering(user_input):
     predicted_intent = cluster_to_intent.get(cluster_id, None)
     return predicted_intent
 
+chat_length = 0
+
 while True:
     sentence = input("You: ")
     if sentence == "quit":
@@ -359,7 +362,8 @@ while True:
             if is_fixing:
                 order_id_fix = missing_field_context["order_id"]
                 field = missing_field_context["field"]
-                print(f"{bot_name}: {field_prompts[field]}")
+                #print(f"{bot_name}: hehe {field_prompts[field]}")
+                
             continue
         else: # not certain this is necesary, may cause a bug or prevent one lol? replace with exception block eventually
             # If value not found, proceed to process intents
@@ -374,14 +378,15 @@ while True:
     if predicted_tag:
         for intent in intents['intents']:
             if predicted_tag == intent["tag"]:
-                if predicted_tag == "order":
+                if predicted_tag == "order" and not is_fixing:
                     response = process_order_spacy(sentence)
+                    chat_length += 1
                     print(f"{bot_name}: {response}")
                     if DEBUG:
                         print(f"[DEBUG] Current orders: {orders}")
                     check_missing_fields()
 
-                elif predicted_tag == "remove_id":
+                elif predicted_tag == "remove_id" and not is_fixing:
                     order_ids = extract_order_ids(sentence)
                     if order_ids:
                         removed_items = remove_items_by_ids(order_ids)
@@ -394,7 +399,7 @@ while True:
                     else:
                         print(f"{bot_name}: I couldn't detect any order IDs in your request.")
 
-                elif predicted_tag == "remove_desc":
+                elif predicted_tag == "remove_desc" and not is_fixing:
                     # Extract features and remove items based on features
                     features = extract_features(sentence)
                     removed_items = remove_items_by_features(features)
@@ -409,19 +414,27 @@ while True:
                     # Display the current order
                     display_current_order()
 
-                elif predicted_tag == "modify_order":
+                    if is_fixing:
+                        print(f"{bot_name}: {field_prompts[field]}")
+
+                elif predicted_tag == "modify_order" and not is_fixing:
                     # Implement modification logic here
                     print(f"{bot_name}: {random.choice(intent['responses'])}")
                     # Modification code would go here
 
                 else:
-                    print(f"{bot_name}: {random.choice(intent['responses'])}")
 
                 # If still fixing, prompt for the missing field
-                if is_fixing:
-                    order_id_fix = missing_field_context["order_id"]
-                    field = missing_field_context["field"]
-                    print(f"{bot_name}: {field_prompts[field]}")
-                break
+                    if is_fixing:
+                        order_id_fix = missing_field_context["order_id"]
+                        field = missing_field_context["field"]
+                        print(f"{bot_name}: Sorry, I dont understand what you are saying. {field_prompts[field]}")
+                    else:
+                        print(f"{bot_name}: {random.choice(intent['responses'])}")
+
+                
     else:
         print(f"{bot_name}: I do not understand...")
+
+    if chat_length > 0 and not is_fixing and predicted_tag != "checkout":
+        print(f"{bot_name}: Anything else I can help with?")
