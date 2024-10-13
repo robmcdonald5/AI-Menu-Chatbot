@@ -1,3 +1,11 @@
 torch
+<<<<<<< HEAD
 nltk
 numpy
+=======
+numpy
+pymongo>=3.11.0
+spacy
+scikit-learn
+sentence-transformers
+>>>>>>> 7d54f5113137424df1c5e510cce2a790399ba5be

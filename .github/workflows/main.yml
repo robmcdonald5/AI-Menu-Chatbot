@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 name: CI Pipeline
+=======
+name: Build and Test
+>>>>>>> 7d54f5113137424df1c5e510cce2a790399ba5be
 
 on:
   push:
@@ -11,12 +15,34 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+<<<<<<< HEAD
+=======
+
+>>>>>>> 7d54f5113137424df1c5e510cce2a790399ba5be
     steps:
     - name: Checkout code
       uses: actions/checkout@v2
 
+<<<<<<< HEAD
     - name: Install dependencies
       run: npm install
 
     - name: Run tests
       run: npm test
+=======
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run tests
+      run: |
+        # If you have tests, run them here
+        # python -m unittest discover
+        echo "No tests configured"
+>>>>>>> 7d54f5113137424df1c5e510cce2a790399ba5be

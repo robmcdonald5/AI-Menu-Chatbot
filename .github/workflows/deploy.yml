@@ -3,7 +3,11 @@ name: Deploy to Heroku
 on:
   push:
     branches:
+<<<<<<< HEAD
       - main  # Deploys when changes are pushed to `main`
+=======
+      - main
+>>>>>>> 7d54f5113137424df1c5e510cce2a790399ba5be
 
 jobs:
   deploy:
@@ -13,6 +17,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v2
 
+<<<<<<< HEAD
     - name: Set up Heroku
       run: |
         curl https://cli-assets.heroku.com/install.sh | sh
@@ -24,3 +29,24 @@ jobs:
 
     - name: Deploy to Heroku
       run: git push https://heroku:$HEROKU_API_KEY@git.heroku.com/${{ secrets.HEROKU_APP_NAME }}.git main
+=======
+    - name: Login to Heroku Container Registry
+      env:
+        HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+      run: |
+        echo "$HEROKU_API_KEY" | docker login --username=_ --password-stdin registry.heroku.com
+
+    - name: Build, tag, and push Docker image to Heroku
+      env:
+        HEROKU_APP_NAME: ${{ secrets.HEROKU_APP_NAME }}
+      run: |
+        docker build -t registry.heroku.com/${{ secrets.HEROKU_APP_NAME }}/web .
+        docker push registry.heroku.com/${{ secrets.HEROKU_APP_NAME }}/web
+
+    - name: Release app on Heroku
+      env:
+        HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+        HEROKU_APP_NAME: ${{ secrets.HEROKU_APP_NAME }}
+      run: |
+        heroku container:release web --app ${{ secrets.HEROKU_APP_NAME }}
+>>>>>>> 7d54f5113137424df1c5e510cce2a790399ba5be
