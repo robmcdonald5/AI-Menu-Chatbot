@@ -147,7 +147,8 @@ class TestChatbot(unittest.TestCase):
             "Brown rice.",
             "Pinto beans please.",
             "None for toppings on the bowl.",
-            "Actually, I changed my mind remove order #2 please.",
+            "Yah, I actually want to change my order.",
+            "Remove order 2.",
             "No, that’s all.",
             "quit"
         ]
