@@ -1,104 +1,197 @@
 {
-    "intents": [
-      {
-        "tag": "greeting",
-        "patterns": [
-          "Hi",
-          "Hey",
-          "How are you",
-          "Is anyone there?",
-          "Hello",
-          "Good day"
-        ],
-        "responses": [
-          "Hey :-)",
-          "Hello, thanks for visiting",
-          "Hi there, what can I do for you?",
-          "Hi there, how can I help?"
-        ]
-      },
-      {
-        "tag": "goodbye",
-        "patterns": ["Bye", "See you later", "Goodbye"],
-        "responses": [
-          "Delete",
-          "See you later, thanks for visiting",
-          "Have a nice day",
-          "Bye! Come back again soon."
-        ]
-      },
-      {
-        "tag": "order",
-        "patterns": ["I'd like a", "Can I get a", "I want a", "Give me a", "I'd like to order a", "I want to order a", "Can I order a"],
-        "responses": ["Got it! I've added {item} to your order.", "Adding {item} to your cart.", "Sure! {item} is added."]
-      },
-      {
-        "tag": "remove",
-        "patterns": [
-          "Could you remove",
-          "Please remove",
-          "Take out",
-          "Remove"
-        ],
-        "responses": [
-          "I've removed {item} from your order.",
-          "{item} has been removed from your cart.",
-          "Sure, I took {item} off your order."
-        ]
-      },
-      {
-        "tag": "thanks",
-        "patterns": ["Thanks", "Thank you", "That's helpful", "Thank's a lot!"],
-        "responses": ["Happy to help!", "Any time!", "My pleasure"]
-      },
-      {
-        "tag": "items",
-        "patterns": [
-          "Which items do you have?",
-          "What kinds of items are there?",
-          "What do you sell?"
-        ],
-        "responses": [
-          "We sell coffee and tea",
-          "We have coffee and tea"
-        ]
-      },
-      {
-        "tag": "payments",
-        "patterns": [
-          "Do you take credit cards?",
-          "Do you accept Mastercard?",
-          "Can I pay with Paypal?",
-          "Are you cash only?"
-        ],
-        "responses": [
-          "We accept VISA, Mastercard and Paypal",
-          "We accept most major credit cards, and Paypal"
-        ]
-      },
-      {
-        "tag": "delivery",
-        "patterns": [
-          "How long does delivery take?",
-          "How long does shipping take?",
-          "When do I get my delivery?"
-        ],
-        "responses": [
-          "Delivery takes 2-4 days",
-          "Shipping takes 2-4 days"
-        ]
-      },
-      {
-        "tag": "funny",
-        "patterns": [
-          "Tell me a joke!",
-          "Tell me something funny!",
-          "Do you know a joke?"
-        ],
-        "responses": [
-          "Why did the hipster burn his mouth? He drank the coffee before it was cool.",
-          "What did the buffalo say when his son left for college? Bison."
-        ]
-      }
-    ]
-  }
+  "intents": [
+    {
+      "tag": "greeting",
+      "patterns": [
+        "Good morning",
+        "Good afternoon",
+        "Good evening",
+        "Howdy",
+        "What's up",
+        "Greetings"
+      ],
+      "responses": [
+        "Hey :-)",
+        "Hello, thanks for visiting",
+        "Hi there, what can I do for you?",
+        "Hi there, how can I help?"
+      ]
+    },
+    {
+      "tag": "goodbye",
+      "patterns": [
+        "Goodbye",
+        "Bye",
+        "See you later",
+        "Catch you later",
+        "I'm leaving",
+        "Have a good day",
+        "Peace out"
+      ],
+      "responses": [
+        "See you later, thanks for visiting",
+        "Have a nice day",
+        "Bye! Come back again soon."
+      ]
+    },
+    {
+      "tag": "order",
+      "patterns": [
+        "I want to order food",
+        "I'd like to order",
+        "Can I get a",
+        "Let me get a",
+        "I'd like a",
+        "Can I have a",
+        "I would like to buy a",
+        "I'll have a",
+        "Give me a",
+        "Hi, I'd like a",
+        "Hello, can I order a",
+        "Hey, I want a",
+        "Get me a steak",
+        "I need a"
+      ],
+      "responses": [
+        "Sure, let's add that to your order.",
+        "Got it! I've added it to your cart.",
+        "Adding item to your order."
+      ]
+    },
+    {
+      "tag": "remove_id",
+      "patterns": [
+        "Remove item",
+        "Delete order",
+        "Can you remove",
+        "Take off",
+        "Please remove",
+        "Delete from my order",
+        "Get rid of",
+        "I want to remove"
+      ],
+      "responses": [
+        "I've removed the item from your order.",
+        "Item has been removed from your cart.",
+        "Sure, I took the item off your order."
+      ]
+    },
+    {
+      "tag": "remove_desc",
+      "patterns": [
+        "Please remove all items with toppings",
+        "Remove all items with no cheese",
+        "Delete everything with lettuce",
+        "Can you take off all orders with extra sauce",
+        "Remove the burrito with steak",
+        "Delete the bowl with chicken",
+        "I want to remove the item with guacamole",
+        "Take away the order with black beans"
+      ],
+      "responses": [
+        "I've removed the items from your order.",
+        "Items have been removed from your cart.",
+        "Sure, I took the items off your order."
+      ]
+    },
+    {
+      "tag": "modify_order",
+      "patterns": [
+        "I want to change my order",
+        "Can I modify my order",
+        "I need to update my order",
+        "I want to edit my order",
+        "Change something in my order",
+        "I made a mistake in my order"
+      ],
+      "responses": [
+        "Sure, what would you like to modify in your order?",
+        "Okay, tell me what changes you'd like to make to your order."
+      ]
+    },
+    {
+      "tag": "thanks",
+      "patterns": [
+        "Thank you",
+        "Thanks",
+        "Thanks a lot",
+        "Much appreciated",
+        "Thank you so much",
+        "Thanks for the help",
+        "I appreciate it"
+      ],
+      "responses": [
+        "Happy to help!",
+        "Any time!",
+        "My pleasure"
+      ]
+    },
+    {
+      "tag": "menu",
+      "patterns": [
+        "Show me the menu",
+        "What do you have",
+        "What are the options",
+        "What's on the menu",
+        "Let me see the food options",
+        "I'd like to see the menu"
+      ],
+      "responses": [
+        "We sell burritos and bowls",
+        "We have burritos and bowls"
+      ]
+    },
+    {
+      "tag": "check_order",
+      "patterns": [
+        "What is my current order",
+        "Can you show me my order",
+        "What have I ordered so far",
+        "Tell me my current order",
+        "Show my current cart",
+        "What's in my order"
+      ],
+      "responses": [
+        "Here is your current order:",
+        "These are the items in your order:"
+      ]
+    },
+    {
+      "tag": "vegan",
+      "patterns": [
+        "What is the vegan option for meat",
+        "Do you have vegan options",
+        "Is there a vegetarian choice",
+        "Show me the vegan items",
+        "Any vegan substitutes",
+        "I prefer plant-based options"
+      ],
+      "responses": [
+        "We offer fajita veggies as a vegan option.",
+        "You can choose fajita veggies for a vegan meal."
+      ]
+    },
+    {
+      "tag": "checkout",
+      "patterns": [
+        "Finished ordering",
+        "I'm done",
+        "Complete my order",
+        "That's all I want",
+        "I'm ready to checkout",
+        "Proceed to payment",
+        "Let's finish up",
+        "No, that should be it",
+        "Yes, that's all good",
+        "Yes, that's perfect",
+        "Yes, that's everything",
+        "No, that's all",
+        "That will be all, thanks"
+      ],
+      "responses": [
+        "Alright! I'll get your order ready.",
+        "Your order is complete."
+      ]
+    }
+  ]
+}
