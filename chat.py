@@ -114,14 +114,13 @@ def check_missing_fields():
             if not order[field]:  # Checks if the list is empty
                 missing_field_context["order_id"] = order["id"]
                 missing_field_context["field"] = field
-                prompt_user_for_missing_field(order["id"], field)
+                #prompt_user_for_missing_field(order["id"], field)
                 is_fixing = True
-                return  # Stop after finding the first missing field
+                return  f"{bot_name}: For order {order_id}, {field_prompts[field]}"
     is_fixing = False  # No missing fields left
-    print(f"{bot_name}: Anything else I can help with?")
+    return f"{bot_name}: Anything else I can help with?"
 
-def prompt_user_for_missing_field(order_id, field):
-    print(f"{bot_name}: For order {order_id}, {field_prompts[field]}")
+
 
 def update_order(order_id, field, value):
     for order in orders:
@@ -344,6 +343,7 @@ chat_length = 0
 def chat():
     global is_fixing, order_id, orders, missing_field_context, chat_length
 
+    addon_sentence = ""
     data = request.json
     sentence = data.get("message")
     if not sentence:
@@ -369,8 +369,8 @@ def chat():
             if is_fixing:
                 order_id_fix = missing_field_context["order_id"]
                 field = missing_field_context["field"]
-                return jsonify({"response": f"{field_prompts[field]}"})
-            return jsonify({"response": "Order updated successfully"})
+                return jsonify({"response": f"For order {order_id_fix}, {field_prompts[field]}"})
+            return jsonify({"response": "Order updated successfully\nAnything else I can help with?"})
         else:
             pass
 
@@ -378,6 +378,9 @@ def chat():
 
     if DEBUG:
         print(f"[DEBUG] Input embedding shape: {predicted_tag}")
+
+    if chat_length > 0 and not is_fixing and predicted_tag != "checkout":
+        addon_sentence = "Anything else I can help with?"
 
     if predicted_tag:
         for intent in intents['intents']:
@@ -387,8 +390,8 @@ def chat():
                     chat_length += 1
                     if DEBUG:
                         print(f"[DEBUG] Current orders: {orders}")
-                    check_missing_fields()
-                    return jsonify({"response": response})
+                    missing_field_response = check_missing_fields()
+                    return jsonify({"response": f"{response}\n{missing_field_response}"})
 
                 elif predicted_tag == "remove_id" and not is_fixing:
                     order_ids = extract_order_ids(sentence)
@@ -397,11 +400,11 @@ def chat():
                         if removed_items:
                             if DEBUG:
                                 print(f"[DEBUG] Current orders: {orders}")
-                            return jsonify({"response": f"I've removed the following items from your order: {', '.join(removed_items)}."})
+                            return jsonify({"response": f"I've removed the following items from your order: {', '.join(removed_items)}.\n{addon_sentence}"})
                         else:
-                            return jsonify({"response": "I couldn't find any items with the specified IDs."})
+                            return jsonify({"response": f"I couldn't find any items with the specified IDs.\n{addon_sentence}"})
                     else:
-                        return jsonify({"response": "I couldn't detect any order IDs in your request."})
+                        return jsonify({"response": f"I couldn't detect any order IDs in your request.\n{addon_sentence}"})
 
                 elif predicted_tag == "remove_desc" and not is_fixing:
                     features = extract_features(sentence)
@@ -409,15 +412,15 @@ def chat():
                     if removed_items:
                         if DEBUG:
                             print(f"[DEBUG] Current orders: {orders}")
-                        return jsonify({"response": f"I've removed the following items from your order: {', '.join(removed_items)}."})
+                        return jsonify({"response": f"I've removed the following items from your order: {', '.join(removed_items)}.\n{addon_sentence}"})
                     else:
-                        return jsonify({"response": "I couldn't find any items matching the specified features."})
+                        return jsonify({"response": f"I couldn't find any items matching the specified features.\n{addon_sentence}"})
 
                 elif predicted_tag == "check_order":
                     display_details = display_current_order()
                     if is_fixing:
-                        return jsonify({"response": f"{display_details}\n{field_prompts[field]}"})
-                    return jsonify({"response": display_details})
+                        return jsonify({"response": f"{display_details}\n{field_prompts[field]}\n{addon_sentence}"})
+                    return jsonify({"response": f"{display_details}\n{addon_sentence}"})
 
                 elif predicted_tag == "modify_order" and not is_fixing:
                     return jsonify({"response": random.choice(intent['responses'])})
@@ -426,15 +429,14 @@ def chat():
                     if is_fixing:
                         order_id_fix = missing_field_context["order_id"]
                         field = missing_field_context["field"]
-                        return jsonify({"response": f"Sorry, I don't understand what you are saying. {field_prompts[field]}"})
+                        return jsonify({"response": f"Sorry, I don't understand what you are saying. {field_prompts[field]}\n{addon_sentence}"})
                     else:
                         return jsonify({"response": random.choice(intent['responses'])})
 
     else:
         return jsonify({"response": "I do not understand..."})
 
-    if chat_length > 0 and not is_fixing and predicted_tag != "checkout":
-        return jsonify({"response": "Anything else I can help with?"})
+    
 
 if __name__ == '__main__':
     app.run(debug=True)
