@@ -1,3 +1,5 @@
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 import random
 import json
 import torch
@@ -8,6 +10,9 @@ from sklearn.cluster import KMeans
 from spacy.matcher import PhraseMatcher
 from sentence_transformers import SentenceTransformer, util
 from collections import Counter
+
+app = Flask(__name__)
+CORS(app)
 
 # Load SpaCy model and Sentence-BERT model
 nlp = spacy.load('en_core_web_sm')
@@ -227,15 +232,16 @@ def extract_field_value(field, user_input):
 
 def display_current_order():
     if orders:
-        print(f"{bot_name}: Here is your current order:")
+        order_details = [f"{bot_name}: Here is your current order:"]
         for order in orders:
             meats = ', '.join(order['meats']) if order['meats'] else 'None'
             rice = ', '.join(order['rice']) if order['rice'] else 'None'
             beans = ', '.join(order['beans']) if order['beans'] else 'None'
             toppings = ', '.join(order['toppings']) if order['toppings'] else 'None'
-            print(f"Order ID: {order['id']}, Item: {order['item']}, Meats: {meats}, Rice: {rice}, Beans: {beans}, Toppings: {toppings}")
+            order_details.append(f"Order ID: {order['id']}, Item: {order['item']}, Meats: {meats}, Rice: {rice}, Beans: {beans}, Toppings: {toppings}")
+        return '\n'.join(order_details)
     else:
-        print(f"{bot_name}: Your order is currently empty.")
+        return f"{bot_name}: Your order is currently empty."
 
 def extract_order_ids(input_sentence):
     doc = nlp(input_sentence)
@@ -334,10 +340,14 @@ def predict_intent_with_clustering(user_input):
 
 chat_length = 0
 
-while True:
-    sentence = input("You: ")
-    if sentence == "quit":
-        break
+@app.route('/chat', methods=['POST'])
+def chat():
+    global is_fixing, order_id, orders, missing_field_context, chat_length
+
+    data = request.json
+    sentence = data.get("message")
+    if not sentence:
+        return jsonify({"response": "No message provided"}), 400
 
     cleaned_sentence = clean_sentence(sentence)
 
@@ -346,11 +356,9 @@ while True:
 
     # If fixing, first try to extract the missing field value
     if is_fixing:
-        # User is providing missing field info
         order_id_fix = missing_field_context["order_id"]
         field = missing_field_context["field"]
 
-        # Extract the value using the updated function
         value = extract_field_value(field, cleaned_sentence)
 
         if DEBUG:
@@ -358,18 +366,14 @@ while True:
 
         if value:
             update_order(order_id_fix, field, value)
-            # After updating, check if there are more missing fields
             if is_fixing:
                 order_id_fix = missing_field_context["order_id"]
                 field = missing_field_context["field"]
-                #print(f"{bot_name}: hehe {field_prompts[field]}")
-                
-            continue
-        else: # not certain this is necesary, may cause a bug or prevent one lol? replace with exception block eventually
-            # If value not found, proceed to process intents
+                return jsonify({"response": f"{field_prompts[field]}"})
+            return jsonify({"response": "Order updated successfully"})
+        else:
             pass
 
-    # Compute embedding with clustering
     predicted_tag = predict_intent_with_clustering(sentence)
 
     if DEBUG:
@@ -381,60 +385,56 @@ while True:
                 if predicted_tag == "order" and not is_fixing:
                     response = process_order_spacy(sentence)
                     chat_length += 1
-                    print(f"{bot_name}: {response}")
                     if DEBUG:
                         print(f"[DEBUG] Current orders: {orders}")
                     check_missing_fields()
+                    return jsonify({"response": response})
 
                 elif predicted_tag == "remove_id" and not is_fixing:
                     order_ids = extract_order_ids(sentence)
                     if order_ids:
                         removed_items = remove_items_by_ids(order_ids)
                         if removed_items:
-                            print(f"{bot_name}: I've removed the following items from your order: {', '.join(removed_items)}.")
                             if DEBUG:
                                 print(f"[DEBUG] Current orders: {orders}")
+                            return jsonify({"response": f"I've removed the following items from your order: {', '.join(removed_items)}."})
                         else:
-                            print(f"{bot_name}: I couldn't find any items with the specified IDs.")
+                            return jsonify({"response": "I couldn't find any items with the specified IDs."})
                     else:
-                        print(f"{bot_name}: I couldn't detect any order IDs in your request.")
+                        return jsonify({"response": "I couldn't detect any order IDs in your request."})
 
                 elif predicted_tag == "remove_desc" and not is_fixing:
-                    # Extract features and remove items based on features
                     features = extract_features(sentence)
                     removed_items = remove_items_by_features(features)
                     if removed_items:
-                        print(f"{bot_name}: I've removed the following items from your order: {', '.join(removed_items)}.")
                         if DEBUG:
                             print(f"[DEBUG] Current orders: {orders}")
+                        return jsonify({"response": f"I've removed the following items from your order: {', '.join(removed_items)}."})
                     else:
-                        print(f"{bot_name}: I couldn't find any items matching the specified features.")
+                        return jsonify({"response": "I couldn't find any items matching the specified features."})
 
                 elif predicted_tag == "check_order":
-                    # Display the current order
-                    display_current_order()
-
+                    display_details = display_current_order()
                     if is_fixing:
-                        print(f"{bot_name}: {field_prompts[field]}")
+                        return jsonify({"response": f"{display_details}\n{field_prompts[field]}"})
+                    return jsonify({"response": display_details})
 
                 elif predicted_tag == "modify_order" and not is_fixing:
-                    # Implement modification logic here
-                    print(f"{bot_name}: {random.choice(intent['responses'])}")
-                    # Modification code would go here
+                    return jsonify({"response": random.choice(intent['responses'])})
 
                 else:
-
-                # If still fixing, prompt for the missing field
                     if is_fixing:
                         order_id_fix = missing_field_context["order_id"]
                         field = missing_field_context["field"]
-                        print(f"{bot_name}: Sorry, I dont understand what you are saying. {field_prompts[field]}")
+                        return jsonify({"response": f"Sorry, I don't understand what you are saying. {field_prompts[field]}"})
                     else:
-                        print(f"{bot_name}: {random.choice(intent['responses'])}")
+                        return jsonify({"response": random.choice(intent['responses'])})
 
-                
     else:
-        print(f"{bot_name}: I do not understand...")
+        return jsonify({"response": "I do not understand..."})
 
     if chat_length > 0 and not is_fixing and predicted_tag != "checkout":
-        print(f"{bot_name}: Anything else I can help with?")
+        return jsonify({"response": "Anything else I can help with?"})
+
+if __name__ == '__main__':
+    app.run(debug=True)
