@@ -1,0 +1,16 @@
+# Ignore everything
+*
+
+# Allow specific directories
+!frontend/
+
+# Allow specific files
+!chat.py
+!connect.py
+!db_test.py
+!db.py
+!intents.json
+!test_chatbot.py
+
+# Allow Git configuration and ignore rules
+!.gitignore

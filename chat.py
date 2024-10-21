@@ -4,10 +4,14 @@ import torch
 import re
 import spacy
 import numpy as np
+import uuid
 from sklearn.cluster import KMeans
 from spacy.matcher import PhraseMatcher
 from sentence_transformers import SentenceTransformer, util
 from collections import Counter
+
+# Import the database connection
+from connect import db  # Make sure connect.py is in the same directory
 
 # Load SpaCy model and Sentence-BERT model
 nlp = spacy.load('en_core_web_sm')
@@ -60,24 +64,61 @@ for cluster_id in range(num_clusters):
 if DEBUG:
     print(f"[DEBUG] Cluster to Intent Mapping: {cluster_to_intent}")
 
-order_id = 1
 is_fixing = False
 
-menu = {
-    "bowl": 4.99,
-    "burrito": 6.49,
-}
+# Generate a unique session ID
+session_id = str(uuid.uuid4())
 
-meats = ["smoked brisket", "steak", "carnitas", "chicken", "barbacoa", "sofritas", "pollo asado", "fajita veggies"]
-rice = ["white rice", "brown rice", "cauliflower rice", "none"]
-beans = ["black beans", "pinto beans", "none"]
-toppings = ["guacamole", "tomato salsa", "chili corn salsa",
-            "tomatillo green chili salsa", "tomatillo red chili salsa", "sour cream",
-            "fajita veggies", "cheese", "romaine lettuce", "queso blanco", "none"]
+# Initialize order_id for this session
+order_id = 1
 
+# Fetch menu data from the database
+def fetch_menu_data():
+    # Fetch main menu items
+    main_items_cursor = db.MenuItem.find({'category': 'Main'})
+    main_items = list(main_items_cursor)
+
+    # Build the menu dictionary with item names and prices
+    menu = {}
+    for item in main_items:
+        name = item['name'].lower()
+        if 'size_details' in item and item['size_details']:
+            price = item['size_details'][0].get('price', 0)
+            menu[name] = price
+        else:
+            menu[name] = 0  # Default price if not available
+
+    # Fetch addons and normalize names to lowercase
+    # Since 'category' is an array, we can query directly with the category name
+    meats = [item['name'].lower() for item in db.MenuItem.find({'category': 'Protein'})]
+    rice = [item['name'].lower() for item in db.MenuItem.find({'category': 'Rice'})]
+    beans = [item['name'].lower() for item in db.MenuItem.find({'category': 'Beans'})]
+    toppings = [item['name'].lower() for item in db.MenuItem.find({'category': 'Toppings'})]
+
+    if DEBUG:
+        print(f"[DEBUG] Meats list: {meats}")
+        print(f"[DEBUG] Rice list: {rice}")
+        print(f"[DEBUG] Beans list: {beans}")
+        print(f"[DEBUG] Toppings list: {toppings}")
+
+        # Fetch all items and collect categories
+        all_items = list(db.MenuItem.find({}))
+        categories_set = set()
+        for item in all_items:
+            if 'category' in item:
+                categories = item['category']
+                if isinstance(categories, list):
+                    categories_set.update([cat.lower() for cat in categories])
+                else:
+                    categories_set.add(item['category'].lower())
+        print(f"[DEBUG] All categories in database: {categories_set}")
+
+    return menu, meats, rice, beans, toppings
+
+menu, meats, rice, beans, toppings = fetch_menu_data()
+
+# Create addons list
 addons_list = meats + rice + beans + toppings
-
-orders = []
 
 missing_field_context = {}
 
@@ -91,25 +132,15 @@ field_prompts = {
 bot_name = "Chipotle"
 print("Hi I am an automated Chipotle AI menu, what would you like to order! (type 'quit' to exit)")
 
-def remove_item_from_order(order_id):
-    global orders
-    for i, order in enumerate(orders):
-        if order["id"] == order_id:
-            del orders[i]
-            # Update order IDs
-            for index, order in enumerate(orders):
-                order["id"] = index + 1
-            return True
-    return False
-
 def check_missing_fields():
     global is_fixing
+    orders = list(db.Orders.find({"session_id": session_id}))
     for order in orders:
         for field in ["meats", "rice", "beans", "toppings"]:
-            if not order[field]:  # Checks if the list is empty
-                missing_field_context["order_id"] = order["id"]
+            if not order.get(field):  # Checks if the list is empty or missing
+                missing_field_context["order_id"] = order["order_id"]
                 missing_field_context["field"] = field
-                prompt_user_for_missing_field(order["id"], field)
+                prompt_user_for_missing_field(order["order_id"], field)
                 is_fixing = True
                 return  # Stop after finding the first missing field
     is_fixing = False  # No missing fields left
@@ -119,11 +150,11 @@ def prompt_user_for_missing_field(order_id, field):
     print(f"{bot_name}: For order {order_id}, {field_prompts[field]}")
 
 def update_order(order_id, field, value):
-    for order in orders:
-        if order["id"] == order_id:
-            order[field] = value
-            print(f"{bot_name}: Updated order {order_id} with {field}: {value}")
-            break
+    db.Orders.update_one(
+        {"session_id": session_id, "order_id": order_id},
+        {"$set": {field: value}}
+    )
+    print(f"{bot_name}: Updated order {order_id} with {field}: {', '.join(value)}")
     missing_field_context.clear()
     check_missing_fields()  # Check if there are more missing fields
 
@@ -160,24 +191,26 @@ def process_order_spacy(input_sentence):
     # Extract addons
     doc_text = doc.text.lower()
     for meat in meats:
-        if meat in doc_text:
+        if meat.lower() in doc_text:
             meats_op.append(meat)
     for rice_type in rice:
-        if rice_type in doc_text:
+        if rice_type.lower() in doc_text:
             rice_op.append(rice_type)
     for bean in beans:
-        if bean in doc_text:
+        if bean.lower() in doc_text:
             beans_op.append(bean)
     for topping in toppings:
-        if topping in doc_text:
+        if topping.lower() in doc_text:
             toppings_op.append(topping)
 
     if items:
         for item in items:
             price = menu[item]
             for _ in range(quantity):
-                orders.append({
-                    "id": order_id,
+                # Insert the order into the database
+                db.Orders.insert_one({
+                    "session_id": session_id,
+                    "order_id": order_id,
                     "item": item,
                     "price": price,
                     "meats": meats_op if meats_op else [],
@@ -185,17 +218,10 @@ def process_order_spacy(input_sentence):
                     "beans": beans_op if beans_op else [],
                     "toppings": toppings_op if toppings_op else []
                 })
-                order_id += 1
+                order_id += 1  # Increment order_id for the session
         return f"Added {quantity} {', '.join(items)} to your order."
     else:
         return "Sorry, I didn't understand the items you want to order."
-
-def extract_item_spacy(input_sentence):
-    doc = nlp(input_sentence)
-    for token in doc:
-        if token.lemma_ in menu:
-            return token.lemma_
-    return None
 
 def extract_field_value(field, user_input):
     # Create a PhraseMatcher
@@ -214,6 +240,10 @@ def extract_field_value(field, user_input):
     matcher.add("FIELD_VALUE", patterns)
 
     doc = nlp(user_input)
+    if DEBUG:
+        print(f"[DEBUG] Field: {field}")
+        print(f"[DEBUG] Patterns: {[doc.text for doc in patterns]}")
+        print(f"[DEBUG] User Input: {user_input}")
     matches = matcher(doc)
     if matches:
         # Collect all matching phrases
@@ -221,11 +251,16 @@ def extract_field_value(field, user_input):
         for match_id, start, end in matches:
             span = doc[start:end]
             values.add(span.text.lower())
+        if DEBUG:
+            print(f"[DEBUG] Matches found: {values}")
         return list(values)
     else:
+        if DEBUG:
+            print("[DEBUG] No matches found.")
         return None
 
 def display_current_order():
+    orders = list(db.Orders.find({"session_id": session_id}))
     if orders:
         print(f"{bot_name}: Here is your current order:")
         for order in orders:
@@ -233,7 +268,7 @@ def display_current_order():
             rice = ', '.join(order['rice']) if order['rice'] else 'None'
             beans = ', '.join(order['beans']) if order['beans'] else 'None'
             toppings = ', '.join(order['toppings']) if order['toppings'] else 'None'
-            print(f"Order ID: {order['id']}, Item: {order['item']}, Meats: {meats}, Rice: {rice}, Beans: {beans}, Toppings: {toppings}")
+            print(f"Order ID: {order['order_id']}, Item: {order['item']}, Meats: {meats}, Rice: {rice}, Beans: {beans}, Toppings: {toppings}")
     else:
         print(f"{bot_name}: Your order is currently empty.")
 
@@ -249,17 +284,12 @@ def extract_order_ids(input_sentence):
     return order_ids
 
 def remove_items_by_ids(order_ids):
-    global orders
     removed_items = []
     for oid in order_ids:
-        for i, order in enumerate(orders):
-            if order["id"] == oid:
-                removed_items.append(f"{order['item']} (Order ID {oid})")
-                del orders[i]
-                break
-    # Update the IDs of the remaining orders
-    for index, order in enumerate(orders):
-        order["id"] = index + 1
+        order = db.Orders.find_one({"session_id": session_id, "order_id": oid})
+        if order:
+            removed_items.append(f"{order['item']} (Order ID {oid})")
+            db.Orders.delete_one({"session_id": session_id, "order_id": oid})
     return removed_items
 
 def extract_features(input_sentence):
@@ -280,48 +310,40 @@ def extract_features(input_sentence):
     # Extract addons
     doc_text = doc.text.lower()
     for meat in meats:
-        if meat in doc_text:
+        if meat.lower() in doc_text:
             features["meats"].append(meat)
     for rice_type in rice:
-        if rice_type in doc_text:
+        if rice_type.lower() in doc_text:
             features["rice"].append(rice_type)
     for bean in beans:
-        if bean in doc_text:
+        if bean.lower() in doc_text:
             features["beans"].append(bean)
     for topping in toppings:
-        if topping in doc_text:
+        if topping.lower() in doc_text:
             features["toppings"].append(topping)
 
     return features
 
 def remove_items_by_features(features):
-    global orders
     removed_items = []
-    new_orders = []
+    query = {"session_id": session_id}
 
-    for order in orders:
-        match = True
-        if features["item"] and order["item"] != features["item"]:
-            match = False
-        if features["meats"] and not any(meat in order["meats"] for meat in features["meats"]):
-            match = False
-        if features["rice"] and not any(rice in order["rice"] for rice in features["rice"]):
-            match = False
-        if features["beans"] and not any(bean in order["beans"] for bean in features["beans"]):
-            match = False
-        if features["toppings"] and not any(topping in order["toppings"] for topping in features["toppings"]):
-            match = False
+    if features["item"]:
+        query["item"] = features["item"]
+    if features["meats"]:
+        query["meats"] = {"$in": features["meats"]}
+    if features["rice"]:
+        query["rice"] = {"$in": features["rice"]}
+    if features["beans"]:
+        query["beans"] = {"$in": features["beans"]}
+    if features["toppings"]:
+        query["toppings"] = {"$in": features["toppings"]}
 
-        if match:
-            removed_items.append(f"{order['item']} (Order ID {order['id']})") # More verbose update added
-        else:
-            new_orders.append(order)
+    orders_to_remove = list(db.Orders.find(query))
 
-    orders = new_orders
-
-    # Update the IDs of the remaining orders
-    for index, order in enumerate(orders):
-        order["id"] = index + 1
+    for order in orders_to_remove:
+        removed_items.append(f"{order['item']} (Order ID {order['order_id']})")
+        db.Orders.delete_one({"session_id": session_id, "order_id": order["order_id"]})
 
     return removed_items
 
@@ -362,18 +384,16 @@ while True:
             if is_fixing:
                 order_id_fix = missing_field_context["order_id"]
                 field = missing_field_context["field"]
-                #print(f"{bot_name}: hehe {field_prompts[field]}")
-                
             continue
-        else: # not certain this is necesary, may cause a bug or prevent one lol? replace with exception block eventually
-            # If value not found, proceed to process intents
+        else:
+            # If value not found, prompt again
             pass
 
     # Compute embedding with clustering
     predicted_tag = predict_intent_with_clustering(sentence)
 
     if DEBUG:
-        print(f"[DEBUG] Input embedding shape: {predicted_tag}")
+        print(f"[DEBUG] Predicted intent: {predicted_tag}")
 
     if predicted_tag:
         for intent in intents['intents']:
@@ -383,7 +403,7 @@ while True:
                     chat_length += 1
                     print(f"{bot_name}: {response}")
                     if DEBUG:
-                        print(f"[DEBUG] Current orders: {orders}")
+                        print(f"[DEBUG] Current orders in DB")
                     check_missing_fields()
 
                 elif predicted_tag == "remove_id" and not is_fixing:
@@ -393,7 +413,7 @@ while True:
                         if removed_items:
                             print(f"{bot_name}: I've removed the following items from your order: {', '.join(removed_items)}.")
                             if DEBUG:
-                                print(f"[DEBUG] Current orders: {orders}")
+                                print(f"[DEBUG] Current orders in DB")
                         else:
                             print(f"{bot_name}: I couldn't find any items with the specified IDs.")
                     else:
@@ -406,7 +426,7 @@ while True:
                     if removed_items:
                         print(f"{bot_name}: I've removed the following items from your order: {', '.join(removed_items)}.")
                         if DEBUG:
-                            print(f"[DEBUG] Current orders: {orders}")
+                            print(f"[DEBUG] Current orders in DB")
                     else:
                         print(f"{bot_name}: I couldn't find any items matching the specified features.")
 
@@ -423,16 +443,14 @@ while True:
                     # Modification code would go here
 
                 else:
-
-                # If still fixing, prompt for the missing field
+                    # If still fixing, prompt for the missing field
                     if is_fixing:
                         order_id_fix = missing_field_context["order_id"]
                         field = missing_field_context["field"]
-                        print(f"{bot_name}: Sorry, I dont understand what you are saying. {field_prompts[field]}")
+                        print(f"{bot_name}: Sorry, I don't understand what you're saying. {field_prompts[field]}")
                     else:
                         print(f"{bot_name}: {random.choice(intent['responses'])}")
 
-                
     else:
         print(f"{bot_name}: I do not understand...")
 
