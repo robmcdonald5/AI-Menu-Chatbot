@@ -24,7 +24,7 @@ nlp = spacy.load('en_core_web_sm')
 sentence_model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
 
 # Toggleable debug mode
-DEBUG = False  # Set to True to enable debug output
+DEBUG = True  # Set to True to enable debug output
 
 # For visual clarity keep this function high in the stack
 def clean_sentence(sentence):
