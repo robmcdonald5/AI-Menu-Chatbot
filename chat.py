@@ -1,3 +1,5 @@
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 import random
 import json
 import torch
@@ -12,6 +14,9 @@ from collections import Counter
 
 # Import the database connection
 from connect import db  # Make sure connect.py is in the same directory
+
+app = Flask(__name__)
+CORS(app)
 
 # Load SpaCy model and Sentence-BERT model
 nlp = spacy.load('en_core_web_sm')
@@ -64,13 +69,8 @@ for cluster_id in range(num_clusters):
 if DEBUG:
     print(f"[DEBUG] Cluster to Intent Mapping: {cluster_to_intent}")
 
-is_fixing = False
-
-# Generate a unique session ID
-session_id = str(uuid.uuid4())
-
-# Initialize order_id for this session
-order_id = 1
+# Session data storage
+session_data = {}
 
 # Fetch menu data from the database
 def fetch_menu_data():
@@ -120,8 +120,6 @@ menu, meats, rice, beans, toppings = fetch_menu_data()
 # Create addons list
 addons_list = meats + rice + beans + toppings
 
-missing_field_context = {}
-
 field_prompts = {
     "meats": "What kind of meat would you like?",
     "rice": "What type of rice would you like?",
@@ -132,31 +130,25 @@ field_prompts = {
 bot_name = "Chipotle"
 print("Hi I am an automated Chipotle AI menu, what would you like to order! (type 'quit' to exit)")
 
-def check_missing_fields():
-    global is_fixing
+def check_missing_fields(session_id):
+    session = session_data[session_id]
     orders = list(db.Orders.find({"session_id": session_id}))
     for order in orders:
         for field in ["meats", "rice", "beans", "toppings"]:
             if not order.get(field):  # Checks if the list is empty or missing
-                missing_field_context["order_id"] = order["order_id"]
-                missing_field_context["field"] = field
-                prompt_user_for_missing_field(order["order_id"], field)
-                is_fixing = True
-                return  # Stop after finding the first missing field
-    is_fixing = False  # No missing fields left
-    print(f"{bot_name}: Anything else I can help with?")
+                session["missing_field_context"]["order_id"] = order["order_id"]
+                session["missing_field_context"]["field"] = field
+                session["is_fixing"] = True
+                return f"For order {order['order_id']}, {field_prompts[field]}"
+    session["is_fixing"] = False  # No missing fields left
+    return "Anything else I can help with?"
 
-def prompt_user_for_missing_field(order_id, field):
-    print(f"{bot_name}: For order {order_id}, {field_prompts[field]}")
-
-def update_order(order_id, field, value):
+def update_order(session_id, order_id, field, value):
     db.Orders.update_one(
         {"session_id": session_id, "order_id": order_id},
         {"$set": {field: value}}
     )
-    print(f"{bot_name}: Updated order {order_id} with {field}: {', '.join(value)}")
-    missing_field_context.clear()
-    check_missing_fields()  # Check if there are more missing fields
+    return f"Updated order {order_id} with {field}: {', '.join(value)}"
 
 def text2int(textnum):
     num_words = {
@@ -165,8 +157,8 @@ def text2int(textnum):
     }
     return num_words.get(textnum.lower(), 1)
 
-def process_order_spacy(input_sentence):
-    global order_id
+def process_order_spacy(session_id, input_sentence):
+    session = session_data[session_id]
     doc = nlp(input_sentence)
     items = []
     meats_op = []
@@ -210,7 +202,7 @@ def process_order_spacy(input_sentence):
                 # Insert the order into the database
                 db.Orders.insert_one({
                     "session_id": session_id,
-                    "order_id": order_id,
+                    "order_id": session["order_id"],
                     "item": item,
                     "price": price,
                     "meats": meats_op if meats_op else [],
@@ -218,7 +210,7 @@ def process_order_spacy(input_sentence):
                     "beans": beans_op if beans_op else [],
                     "toppings": toppings_op if toppings_op else []
                 })
-                order_id += 1  # Increment order_id for the session
+                session["order_id"] += 1  # Increment order_id for the session
         return f"Added {quantity} {', '.join(items)} to your order."
     else:
         return "Sorry, I didn't understand the items you want to order."
@@ -259,18 +251,19 @@ def extract_field_value(field, user_input):
             print("[DEBUG] No matches found.")
         return None
 
-def display_current_order():
+def display_current_order(session_id):
     orders = list(db.Orders.find({"session_id": session_id}))
     if orders:
-        print(f"{bot_name}: Here is your current order:")
+        response_lines = [f"Here is your current order:"]
         for order in orders:
             meats = ', '.join(order['meats']) if order['meats'] else 'None'
             rice = ', '.join(order['rice']) if order['rice'] else 'None'
             beans = ', '.join(order['beans']) if order['beans'] else 'None'
             toppings = ', '.join(order['toppings']) if order['toppings'] else 'None'
-            print(f"Order ID: {order['order_id']}, Item: {order['item']}, Meats: {meats}, Rice: {rice}, Beans: {beans}, Toppings: {toppings}")
+            response_lines.append(f"Order ID: {order['order_id']}, Item: {order['item']}, Meats: {meats}, Rice: {rice}, Beans: {beans}, Toppings: {toppings}")
+        return '\n'.join(response_lines)
     else:
-        print(f"{bot_name}: Your order is currently empty.")
+        return "Your order is currently empty."
 
 def extract_order_ids(input_sentence):
     doc = nlp(input_sentence)
@@ -283,7 +276,7 @@ def extract_order_ids(input_sentence):
                 order_ids.append(text2int(ent.text))
     return order_ids
 
-def remove_items_by_ids(order_ids):
+def remove_items_by_ids(session_id, order_ids):
     removed_items = []
     for oid in order_ids:
         order = db.Orders.find_one({"session_id": session_id, "order_id": oid})
@@ -324,7 +317,7 @@ def extract_features(input_sentence):
 
     return features
 
-def remove_items_by_features(features):
+def remove_items_by_features(session_id, features):
     removed_items = []
     query = {"session_id": session_id}
 
@@ -354,17 +347,47 @@ def predict_intent_with_clustering(user_input):
     predicted_intent = cluster_to_intent.get(cluster_id, None)
     return predicted_intent
 
-chat_length = 0
+@app.route('/chat', methods=['POST'])
+def chat():
+    data = request.json
+    if not data or 'message' not in data:
+        return jsonify({"response": "No message provided"}), 400
 
-while True:
-    sentence = input("You: ")
-    if sentence == "quit":
-        break
+    sentence = data.get("message")
+    session_id = data.get("session_id")
+    if not session_id:
+        # Generate a new session_id and initialize session data
+        session_id = str(uuid.uuid4())
+        session_data[session_id] = {
+            "order_id": 1,
+            "is_fixing": False,
+            "missing_field_context": {},
+            "chat_length": 0
+        }
+        new_session = True
+    else:
+        new_session = False
+        if session_id not in session_data:
+            # Session not found; initialize session data
+            session_data[session_id] = {
+                "order_id": 1,
+                "is_fixing": False,
+                "missing_field_context": {},
+                "chat_length": 0
+            }
+
+    session = session_data[session_id]
+    is_fixing = session["is_fixing"]
+    missing_field_context = session["missing_field_context"]
+    chat_length = session["chat_length"]
 
     cleaned_sentence = clean_sentence(sentence)
 
     if DEBUG:
+        print(f"[DEBUG] Session ID: {session_id}")
         print(f"[DEBUG] Cleaned sentence: {cleaned_sentence}")
+
+    responses = []
 
     # If fixing, first try to extract the missing field value
     if is_fixing:
@@ -379,15 +402,15 @@ while True:
             print(f"[DEBUG] Extracted value: {value}")
 
         if value:
-            update_order(order_id_fix, field, value)
+            update_msg = update_order(session_id, order_id_fix, field, value)
+            responses.append(update_msg)
             # After updating, check if there are more missing fields
-            if is_fixing:
-                order_id_fix = missing_field_context["order_id"]
-                field = missing_field_context["field"]
-            continue
-        else:
-            # If value not found, prompt again
-            pass
+            missing_fields_response = check_missing_fields(session_id)
+            responses.append(missing_fields_response)
+            is_fixing = session_data[session_id]["is_fixing"]
+            if not is_fixing:
+                responses.append("Anything else I can help with?")
+            return jsonify({"response": "\n".join(responses), "session_id": session_id})
 
     # Compute embedding with clustering
     predicted_tag = predict_intent_with_clustering(sentence)
@@ -399,60 +422,72 @@ while True:
         for intent in intents['intents']:
             if predicted_tag == intent["tag"]:
                 if predicted_tag == "order" and not is_fixing:
-                    response = process_order_spacy(sentence)
+                    response = process_order_spacy(session_id, sentence)
                     chat_length += 1
-                    print(f"{bot_name}: {response}")
+                    responses.append(response)
                     if DEBUG:
                         print(f"[DEBUG] Current orders in DB")
-                    check_missing_fields()
+                    missing_fields_response = check_missing_fields(session_id)
+                    responses.append(missing_fields_response)
 
                 elif predicted_tag == "remove_id" and not is_fixing:
                     order_ids = extract_order_ids(sentence)
                     if order_ids:
-                        removed_items = remove_items_by_ids(order_ids)
+                        removed_items = remove_items_by_ids(session_id, order_ids)
                         if removed_items:
-                            print(f"{bot_name}: I've removed the following items from your order: {', '.join(removed_items)}.")
+                            responses.append(f"I've removed the following items from your order: {', '.join(removed_items)}.")
                             if DEBUG:
                                 print(f"[DEBUG] Current orders in DB")
                         else:
-                            print(f"{bot_name}: I couldn't find any items with the specified IDs.")
+                            responses.append("I couldn't find any items with the specified IDs.")
                     else:
-                        print(f"{bot_name}: I couldn't detect any order IDs in your request.")
+                        responses.append("I couldn't detect any order IDs in your request.")
 
                 elif predicted_tag == "remove_desc" and not is_fixing:
                     # Extract features and remove items based on features
                     features = extract_features(sentence)
-                    removed_items = remove_items_by_features(features)
+                    removed_items = remove_items_by_features(session_id, features)
                     if removed_items:
-                        print(f"{bot_name}: I've removed the following items from your order: {', '.join(removed_items)}.")
+                        responses.append(f"I've removed the following items from your order: {', '.join(removed_items)}.")
                         if DEBUG:
                             print(f"[DEBUG] Current orders in DB")
                     else:
-                        print(f"{bot_name}: I couldn't find any items matching the specified features.")
+                        responses.append("I couldn't find any items matching the specified features.")
 
                 elif predicted_tag == "check_order":
                     # Display the current order
-                    display_current_order()
+                    display_details = display_current_order(session_id)
+                    responses.append(display_details)
 
                     if is_fixing:
-                        print(f"{bot_name}: {field_prompts[field]}")
+                        field = missing_field_context["field"]
+                        responses.append(field_prompts[field])
 
                 elif predicted_tag == "modify_order" and not is_fixing:
                     # Implement modification logic here
-                    print(f"{bot_name}: {random.choice(intent['responses'])}")
+                    responses.append(random.choice(intent['responses']))
                     # Modification code would go here
 
                 else:
                     # If still fixing, prompt for the missing field
                     if is_fixing:
-                        order_id_fix = missing_field_context["order_id"]
                         field = missing_field_context["field"]
-                        print(f"{bot_name}: Sorry, I don't understand what you're saying. {field_prompts[field]}")
+                        responses.append(f"Sorry, I don't understand what you're saying. {field_prompts[field]}")
                     else:
-                        print(f"{bot_name}: {random.choice(intent['responses'])}")
+                        responses.append(random.choice(intent['responses']))
 
+                break  # Intent found and processed
     else:
-        print(f"{bot_name}: I do not understand...")
+        responses.append("I do not understand...")
 
     if chat_length > 0 and not is_fixing and predicted_tag != "checkout":
-        print(f"{bot_name}: Anything else I can help with?")
+        responses.append("Anything else I can help with?")
+
+    # Update session data
+    session_data[session_id]["is_fixing"] = is_fixing
+    session_data[session_id]["chat_length"] = chat_length
+
+    return jsonify({"response": "\n".join(responses), "session_id": session_id})
+
+if __name__ == '__main__':
+    app.run(debug=True)
