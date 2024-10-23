@@ -10,6 +10,11 @@ function App() {
   const [showPopup, setShowPopup] = useState(true);
   const [slideOff, setSlideOff] = useState(false);
 
+  // Initialize sessionId from localStorage
+  const [sessionId, setSessionId] = useState(() => {
+    return localStorage.getItem("session_id");
+  });
+
   const handleContinue = () => {
     setSlideOff(true); // Start the slide animation
     setTimeout(() => {
@@ -20,18 +25,38 @@ function App() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (!userInput.trim()) {
+      return; // Don't send empty messages
+    }
+
     const userMessage = { text: userInput, sender: "user" };
     setMessages((prev) => [...prev, userMessage]);
 
     try {
-      const response = await axios.post("http://localhost:5000/chat", {
+      // Prepare the data to send
+      const dataToSend = {
         message: userInput,
-      });
+      };
+
+      // Include session_id if it's already available
+      if (sessionId) {
+        dataToSend.session_id = sessionId;
+      }
+
+      const response = await axios.post("http://localhost:5000/chat", dataToSend);
 
       const gptMessage = { text: response.data.response, sender: "chipotle" };
       setMessages((prev) => [...prev, gptMessage]);
+
+      // Store session_id from the response if it's a new session or updated
+      if (response.data.session_id && response.data.session_id !== sessionId) {
+        setSessionId(response.data.session_id);
+        localStorage.setItem("session_id", response.data.session_id);
+      }
     } catch (error) {
       console.error("Error sending message:", error);
+      const errorMessage = { text: "Sorry, there was an error. Please try again.", sender: "chipotle" };
+      setMessages((prev) => [...prev, errorMessage]);
     }
 
     setUserInput("");

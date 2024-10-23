@@ -9,7 +9,7 @@ import numpy as np
 import uuid
 from sklearn.cluster import KMeans
 from spacy.matcher import PhraseMatcher
-from sentence_transformers import SentenceTransformer, util
+from sentence_transformers import SentenceTransformer
 from collections import Counter
 
 # Import the database connection
@@ -39,7 +39,7 @@ with open('intents.json', 'r') as f:
 all_patterns = []
 pattern_tags = []
 
-# Pattern intent recog main loop
+# Pattern intent recognition main loop
 for intent in intents['intents']:
     tag = intent['tag']
     patterns = intent['patterns']
@@ -74,8 +74,13 @@ session_data = {}
 
 # Fetch menu data from the database
 def fetch_menu_data():
-    # Fetch main menu items
-    main_items_cursor = db.MenuItem.find({'category': 'Main'})
+    # Fetch main menu items with case-insensitive matching and handle arrays
+    main_items_cursor = db.MenuItem.find({
+        '$or': [
+            {'category': {'$regex': '^main$', '$options': 'i'}},
+            {'category': {'$elemMatch': {'$regex': '^main$', '$options': 'i'}}}
+        ]
+    })
     main_items = list(main_items_cursor)
 
     # Build the menu dictionary with item names and prices
@@ -88,12 +93,15 @@ def fetch_menu_data():
         else:
             menu[name] = 0  # Default price if not available
 
+    # Print out menu dictionary to verify "item" is included
+    if DEBUG:
+        print(f"[DEBUG] Menu items: {list(menu.keys())}")
+
     # Fetch addons and normalize names to lowercase
-    # Since 'category' is an array, we can query directly with the category name
-    meats = [item['name'].lower() for item in db.MenuItem.find({'category': 'Protein'})]
-    rice = [item['name'].lower() for item in db.MenuItem.find({'category': 'Rice'})]
-    beans = [item['name'].lower() for item in db.MenuItem.find({'category': 'Beans'})]
-    toppings = [item['name'].lower() for item in db.MenuItem.find({'category': 'Toppings'})]
+    meats = [item['name'].lower() for item in db.MenuItem.find({'category': {'$regex': '^protein$', '$options': 'i'}})]
+    rice = [item['name'].lower() for item in db.MenuItem.find({'category': {'$regex': '^rice$', '$options': 'i'}})]
+    beans = [item['name'].lower() for item in db.MenuItem.find({'category': {'$regex': '^beans$', '$options': 'i'}})]
+    toppings = [item['name'].lower() for item in db.MenuItem.find({'category': {'$regex': '^toppings$', '$options': 'i'}})]
 
     if DEBUG:
         print(f"[DEBUG] Meats list: {meats}")
@@ -130,24 +138,52 @@ field_prompts = {
 bot_name = "Chipotle"
 print("Hi I am an automated Chipotle AI menu, what would you like to order! (type 'quit' to exit)")
 
+# Pushes Orders forward to check or null for next value
+def get_next_order_id(session_id):
+    last_order = db.Orders.find_one({"session_id": session_id}, sort=[("order_id", -1)])
+    if last_order and "order_id" in last_order:
+        return last_order["order_id"] + 1
+    else:
+        return 1
+
 def check_missing_fields(session_id):
     session = session_data[session_id]
-    orders = list(db.Orders.find({"session_id": session_id}))
+    # Only consider orders for this session that are not completed
+    orders = list(db.Orders.find({"session_id": session_id, "completed": False}))
+    if DEBUG:
+        print(f"[DEBUG] Orders with missing fields: {orders}")
     for order in orders:
         for field in ["meats", "rice", "beans", "toppings"]:
             if not order.get(field):  # Checks if the list is empty or missing
+                if DEBUG:
+                    print(f"[DEBUG] Missing field '{field}' in order: {order}")
                 session["missing_field_context"]["order_id"] = order["order_id"]
                 session["missing_field_context"]["field"] = field
                 session["is_fixing"] = True
                 return f"For order {order['order_id']}, {field_prompts[field]}"
     session["is_fixing"] = False  # No missing fields left
-    return "Anything else I can help with?"
+    return None
 
 def update_order(session_id, order_id, field, value):
-    db.Orders.update_one(
+    if DEBUG:
+        order_before = db.Orders.find_one({"session_id": session_id, "order_id": order_id})
+        print(f"[DEBUG] Order before update: {order_before}")
+    result = db.Orders.update_one(
         {"session_id": session_id, "order_id": order_id},
         {"$set": {field: value}}
     )
+    if DEBUG:
+        print(f"[DEBUG] Update result: matched {result.matched_count}, modified {result.modified_count}")
+    # Check if order is now complete
+    order = db.Orders.find_one({"session_id": session_id, "order_id": order_id})
+    if DEBUG:
+        print(f"[DEBUG] Updated order: {order}")
+    required_fields = ["meats", "rice", "beans", "toppings"]
+    if all(order.get(f) for f in required_fields):
+        db.Orders.update_one(
+            {"session_id": session_id, "order_id": order_id},
+            {"$set": {"completed": True}}
+        )
     return f"Updated order {order_id} with {field}: {', '.join(value)}"
 
 def text2int(textnum):
@@ -158,7 +194,6 @@ def text2int(textnum):
     return num_words.get(textnum.lower(), 1)
 
 def process_order_spacy(session_id, input_sentence):
-    session = session_data[session_id]
     doc = nlp(input_sentence)
     items = []
     meats_op = []
@@ -199,18 +234,20 @@ def process_order_spacy(session_id, input_sentence):
         for item in items:
             price = menu[item]
             for _ in range(quantity):
+                # Generate the next order_id for this session
+                order_id = get_next_order_id(session_id)
                 # Insert the order into the database
                 db.Orders.insert_one({
                     "session_id": session_id,
-                    "order_id": session["order_id"],
+                    "order_id": order_id,
                     "item": item,
                     "price": price,
                     "meats": meats_op if meats_op else [],
                     "rice": rice_op if rice_op else [],
                     "beans": beans_op if beans_op else [],
-                    "toppings": toppings_op if toppings_op else []
+                    "toppings": toppings_op if toppings_op else [],
+                    "completed": False  # Add completed flag
                 })
-                session["order_id"] += 1  # Increment order_id for the session
         return f"Added {quantity} {', '.join(items)} to your order."
     else:
         return "Sorry, I didn't understand the items you want to order."
@@ -355,26 +392,28 @@ def chat():
 
     sentence = data.get("message")
     session_id = data.get("session_id")
-    if not session_id:
+
+    if not session_id or session_id not in session_data:
+        old_session_id = session_id  # Save old session_id if any
         # Generate a new session_id and initialize session data
         session_id = str(uuid.uuid4())
         session_data[session_id] = {
-            "order_id": 1,
             "is_fixing": False,
             "missing_field_context": {},
             "chat_length": 0
         }
-        new_session = True
+
+        # Delete orders associated with the old session_id
+        if old_session_id:
+            db.Orders.delete_many({"session_id": old_session_id})
+            if DEBUG:
+                print(f"[DEBUG] Deleted orders for old session_id: {old_session_id}")
+
+        if DEBUG:
+            print(f"[DEBUG] New session created with session_id: {session_id}")
     else:
-        new_session = False
-        if session_id not in session_data:
-            # Session not found; initialize session data
-            session_data[session_id] = {
-                "order_id": 1,
-                "is_fixing": False,
-                "missing_field_context": {},
-                "chat_length": 0
-            }
+        if DEBUG:
+            print(f"[DEBUG] Existing session found with session_id: {session_id}")
 
     session = session_data[session_id]
     is_fixing = session["is_fixing"]
@@ -406,11 +445,37 @@ def chat():
             responses.append(update_msg)
             # After updating, check if there are more missing fields
             missing_fields_response = check_missing_fields(session_id)
-            responses.append(missing_fields_response)
+            if missing_fields_response:
+                responses.append(missing_fields_response)
+
+            # Update is_fixing after checking for missing fields
             is_fixing = session_data[session_id]["is_fixing"]
+
             if not is_fixing:
                 responses.append("Anything else I can help with?")
             return jsonify({"response": "\n".join(responses), "session_id": session_id})
+        else:
+            # Try to predict intent even when is_fixing is True
+            predicted_tag = predict_intent_with_clustering(sentence)
+
+            if DEBUG:
+                print(f"[DEBUG] Predicted intent while fixing: {predicted_tag}")
+
+            if predicted_tag in ["check_order"]:
+                # Handle these intents even when fixing
+                if predicted_tag == "check_order":
+                    display_details = display_current_order(session_id)
+                    responses.append(display_details)
+                    # Prompt again for the missing field
+                    responses.append(field_prompts[field])
+                else:
+                    # For other intents, keep prompting for the missing field
+                    responses.append(f"Sorry, I didn't understand what you're saying. {field_prompts[field]}")
+
+                return jsonify({"response": "\n".join(responses), "session_id": session_id})
+            else:
+                responses.append(f"Sorry, I didn't understand what you're saying. {field_prompts[field]}")
+                return jsonify({"response": "\n".join(responses), "session_id": session_id})
 
     # Compute embedding with clustering
     predicted_tag = predict_intent_with_clustering(sentence)
@@ -428,7 +493,13 @@ def chat():
                     if DEBUG:
                         print(f"[DEBUG] Current orders in DB")
                     missing_fields_response = check_missing_fields(session_id)
-                    responses.append(missing_fields_response)
+                    if missing_fields_response:
+                        responses.append(missing_fields_response)
+                    else:
+                        responses.append("Anything else I can help with?")
+
+                    # Update is_fixing after checking for missing fields
+                    is_fixing = session_data[session_id]["is_fixing"]
 
                 elif predicted_tag == "remove_id" and not is_fixing:
                     order_ids = extract_order_ids(sentence)
@@ -459,9 +530,14 @@ def chat():
                     display_details = display_current_order(session_id)
                     responses.append(display_details)
 
+                    # Update is_fixing after displaying the order
+                    is_fixing = session_data[session_id]["is_fixing"]
+
                     if is_fixing:
-                        field = missing_field_context["field"]
+                        field = session["missing_field_context"]["field"]
                         responses.append(field_prompts[field])
+                    else:
+                        responses.append("Anything else I can help with?")
 
                 elif predicted_tag == "modify_order" and not is_fixing:
                     # Implement modification logic here
@@ -469,9 +545,8 @@ def chat():
                     # Modification code would go here
 
                 else:
-                    # If still fixing, prompt for the missing field
                     if is_fixing:
-                        field = missing_field_context["field"]
+                        field = session["missing_field_context"]["field"]
                         responses.append(f"Sorry, I don't understand what you're saying. {field_prompts[field]}")
                     else:
                         responses.append(random.choice(intent['responses']))
@@ -480,9 +555,6 @@ def chat():
     else:
         responses.append("I do not understand...")
 
-    if chat_length > 0 and not is_fixing and predicted_tag != "checkout":
-        responses.append("Anything else I can help with?")
-
     # Update session data
     session_data[session_id]["is_fixing"] = is_fixing
     session_data[session_id]["chat_length"] = chat_length
@@ -490,4 +562,4 @@ def chat():
     return jsonify({"response": "\n".join(responses), "session_id": session_id})
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=False)
