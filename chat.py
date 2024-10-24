@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import random
 import json
@@ -11,11 +11,12 @@ from sklearn.cluster import KMeans
 from spacy.matcher import PhraseMatcher
 from sentence_transformers import SentenceTransformer
 from collections import Counter
+import os  # Import os module
 
 # Import the database connection
 from connect import db  # Make sure connect.py is in the same directory
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='frontend/build')  # Set static_folder to frontend/build
 CORS(app)
 
 # Load SpaCy model and Sentence-BERT model
@@ -447,6 +448,8 @@ def chat():
             missing_fields_response = check_missing_fields(session_id)
             if missing_fields_response:
                 responses.append(missing_fields_response)
+            else:
+                responses.append("Anything else I can help with?")
 
             # Update is_fixing after checking for missing fields
             is_fixing = session_data[session_id]["is_fixing"]
@@ -560,6 +563,19 @@ def chat():
     session_data[session_id]["chat_length"] = chat_length
 
     return jsonify({"response": "\n".join(responses), "session_id": session_id})
+
+# Serve React frontend
+@app.route('/')
+def home():
+    return send_from_directory(app.static_folder, 'index.html')
+
+# Serve other static files
+@app.route('/<path:path>')
+def serve_static(path):
+    if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
+        return send_from_directory(app.static_folder, path)
+    else:
+        return send_from_directory(app.static_folder, 'index.html')
 
 if __name__ == '__main__':
     app.run(debug=False)

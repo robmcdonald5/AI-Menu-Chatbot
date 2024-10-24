@@ -2,62 +2,47 @@ import os
 from pymongo import MongoClient
 import socks
 import socket
-import urllib.parse
+from urllib.parse import urlparse
 
 class Database:
     def __init__(self, db_name):
-        # Retrieve environment variables
-        self.uri = os.getenv('MONGODB_URI')
-        self.proxy_url = os.getenv('PROXIMO_URL')
-
-        if not self.uri:
-            raise ValueError("MONGODB_URI is not set in environment variables.")
-        
-        if not self.proxy_url:
-            raise ValueError("PROXIMO_URL is not set in environment variables.")
-
-        print(f"MongoDB URI: {self.uri}")         # For debugging; remove in production
-        print(f"Proximo URL: {self.proxy_url}")   # For debugging; remove in production
-
+        self.uri = os.getenv('MONGODB_URI')  # Load MongoDB URI from environment variables
+        print(f"MongoDB URI: {self.uri}")  # Verify URI loading
         self.client = None
         self.db = None
         self.db_name = db_name
 
     def connect(self):
         try:
-            # Parse the PROXIMO_URL
-            parsed = urllib.parse.urlparse(self.proxy_url)
-            proxy_scheme = parsed.scheme.lower()
+            # Check if PROXIMO_URL is set
+            prox_url = os.getenv('PROXIMO_URL')
+            if prox_url:
+                parsed = urlparse(prox_url)
+                proxy_host = parsed.hostname
+                proxy_port = parsed.port
+                proxy_username = parsed.username
+                proxy_password = parsed.password
 
-            if proxy_scheme not in ['socks5', 'socks4']:
-                raise ValueError("PROXIMO_URL must start with socks5:// or socks4://")
+                # Configure SOCKS5 proxy with authentication
+                socks.set_default_proxy(
+                    socks.SOCKS5,
+                    proxy_host,
+                    proxy_port,
+                    username=proxy_username,
+                    password=proxy_password
+                )
+                socket.socket = socks.socksocket
 
-            # Map scheme to PySocks proxy type
-            if proxy_scheme == 'socks5':
-                proxy_type = socks.SOCKS5
-            elif proxy_scheme == 'socks4':
-                proxy_type = socks.SOCKS4
-
-            # Set default proxy
-            socks.set_default_proxy(
-                proxy_type,
-                parsed.hostname,
-                parsed.port,
-                username=parsed.username,
-                password=parsed.password
-            )
-            socket.socket = socks.socksocket
+                print(f"Configured to use Proximo SOCKS5 proxy at {proxy_host}:{proxy_port}")
+            else:
+                print("No Proximo proxy configured.")
 
             # Initialize MongoDB client
             self.client = MongoClient(self.uri)
             self.db = self.client[self.db_name]
-            print("Connection to MongoDB successful via Proximo proxy!")
-
+            print("MongoDB connection successful!")
         except Exception as e:
-            print("Connection to MongoDB failed:", e)
-            raise e
+            print("MongoDB connection failed:", e)
 
     def get_db(self):
-        if not self.db:
-            self.connect()
         return self.db

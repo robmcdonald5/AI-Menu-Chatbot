@@ -6,3 +6,4 @@ spacy
 scikit-learn
 sentence-transformers
 pysocks
+gunicorn

@@ -1,10 +1,18 @@
-# Virtual Environment
-   venv/
-   
-   # Python cache files
-   __pycache__/
-   *.pyc
-   
-   # Other common files to ignore
-   *.log
-   .DS_Store
+# Ignore everything
+*
+
+# Allow specific directories
+!frontend/*
+
+# Allow specific files
+!chat.py
+!connect.py
+!db.py
+!intents.json
+!Dockerfile
+!heroku.yml
+!requirements.txt
+
+# Allow Git configuration and ignore rules
+!.gitignore
+!.dockerignore

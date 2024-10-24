@@ -1,0 +1,22 @@
+# .dockerignore
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# Node modules
+frontend/node_modules/
+
+# React build files (handled in multi-stage build)
+frontend/build/
+
+# Git files
+.git
+.gitignore
+
+# Environment variables
+.env
+
+# Docker files
+Dockerfile
+docker-compose.yml
