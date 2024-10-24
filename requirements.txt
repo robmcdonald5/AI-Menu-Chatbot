@@ -1,7 +1,6 @@
 torch
 nltk
 numpy
-numpy
 pymongo>=3.11.0
 spacy
 scikit-learn
