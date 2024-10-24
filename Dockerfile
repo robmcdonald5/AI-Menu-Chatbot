@@ -40,6 +40,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Install SpaCy model
 RUN python -m spacy download en_core_web_sm
 
+# Set environment variable for SpaCy data path
+ENV SPACY_DATA=/usr/local/lib/python3.12/site-packages
+
 # Create a non-root user for security
 RUN addgroup --system appgroup && adduser --system appuser --ingroup appgroup
 
