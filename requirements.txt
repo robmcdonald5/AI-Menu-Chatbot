@@ -7,3 +7,4 @@ scikit-learn
 sentence-transformers
 pysocks
 gunicorn
+flask
