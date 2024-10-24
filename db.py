@@ -24,6 +24,7 @@ class Database:
                 proxy_password = parsed.password
 
                 # Configure SOCKS5 proxy with authentication
+                print(f"Configuring Proximo SOCKS5 proxy: {proxy_host}:{proxy_port}")
                 socks.set_default_proxy(
                     socks.SOCKS5,
                     proxy_host,
@@ -35,11 +36,14 @@ class Database:
 
                 print(f"Configured to use Proximo SOCKS5 proxy at {proxy_host}:{proxy_port}")
             else:
-                print("No Proximo proxy configured.")
+                print("No Proximo proxy configured. Proceeding without a proxy.")
 
             # Initialize MongoDB client
+            print(f"Attempting to connect to MongoDB with URI: {self.uri}")
             self.client = MongoClient(self.uri)
             self.db = self.client[self.db_name]
+
+            # Log connection status
             print("MongoDB connection successful!")
         except Exception as e:
             print("MongoDB connection failed:", e)
