@@ -1,14 +1,19 @@
 //import logo from "./logo.svg";
 import "./App.css";
 import React, { useState } from "react";
+import axios from "axios";
 
 function App() {
   const [messages, setMessages] = useState([]);
   const [userInput, setUserInput] = useState("");
 
-  const [showPopup, setShowPopup] = useState(true); 
+  const [showPopup, setShowPopup] = useState(true);
   const [slideOff, setSlideOff] = useState(false);
 
+  // Initialize sessionId from localStorage
+  const [sessionId, setSessionId] = useState(() => {
+    return localStorage.getItem("session_id");
+  });
 
   const handleContinue = () => {
     setSlideOff(true); // Start the slide animation
@@ -16,17 +21,45 @@ function App() {
       setShowPopup(false); // Remove the popup after the animation completes
     }, 1000); // Match this with the duration of the slide animation
   };
-  
-  const handleSubmit = (e) => {
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!userInput.trim()) {
+      return; // Don't send empty messages
+    }
 
     const userMessage = { text: userInput, sender: "user" };
     setMessages((prev) => [...prev, userMessage]);
 
-    setUserInput("");
+    try {
+      // Prepare the data to send
+      const dataToSend = {
+        message: userInput,
+      };
 
-    const gptMessage = { text: "Hello", sender: "chipotle" };
-    setMessages((prev) => [...prev, gptMessage]);
+      // Include session_id if it's already available
+      if (sessionId) {
+        dataToSend.session_id = sessionId;
+      }
+
+      const response = await axios.post("http://localhost:5000/chat", dataToSend);
+
+      const gptMessage = { text: response.data.response, sender: "chipotle" };
+      setMessages((prev) => [...prev, gptMessage]);
+
+      // Store session_id from the response if it's a new session or updated
+      if (response.data.session_id && response.data.session_id !== sessionId) {
+        setSessionId(response.data.session_id);
+        localStorage.setItem("session_id", response.data.session_id);
+      }
+    } catch (error) {
+      console.error("Error sending message:", error);
+      const errorMessage = { text: "Sorry, there was an error. Please try again.", sender: "chipotle" };
+      setMessages((prev) => [...prev, errorMessage]);
+    }
+
+    setUserInput("");
   };
 
   return (
@@ -40,11 +73,13 @@ function App() {
       {showPopup && (
         <div
           className={`fixed inset-0 bg-black bg-opacity-75 backdrop-blur-md flex justify-center items-center z-20 transition-transform duration-500 ${
-            slideOff ? 'translate-y-full' : 'translate-y-0'
+            slideOff ? "translate-y-full" : "translate-y-0"
           }`}
         >
           <div className="bg-white p-8 rounded-lg shadow-lg">
-            <h2 className="text-2xl font-bold mb-4">Welcome to Chipotle Chat!</h2>
+            <h2 className="text-2xl font-bold mb-4">
+              Welcome to Chipotle Chat!
+            </h2>
             <p className="mb-4">Press continue to start chatting.</p>
             <button
               onClick={handleContinue}
@@ -63,13 +98,15 @@ function App() {
           {messages.map((msg, idx) => (
             <div
               key={idx}
-              className={`flex mb-2 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+              className={`flex mb-2 ${
+                msg.sender === "user" ? "justify-end" : "justify-start"
+              }`}
             >
               <div
                 className={`p-3 rounded-xl max-w-xs text-lg ${
-                  msg.sender === 'user'
-                    ? 'bg-slate-200 text-slate-900 shadow-lg'
-                    : 'bg-[#441500] text-white shadow-lg'
+                  msg.sender === "user"
+                    ? "bg-slate-200 text-slate-900 shadow-lg"
+                    : "bg-[#441500] text-white shadow-lg"
                 }`}
               >
                 {msg.text}
