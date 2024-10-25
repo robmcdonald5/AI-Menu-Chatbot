@@ -4,7 +4,7 @@ FROM python:3.12-slim
 # Set environment variables for Python
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV LOKY_MAX_CPU_COUNT=2  # Set desired CPU count to silence Joblib warning
+ENV LOKY_MAX_CPU_COUNT=2
 
 # Set working directory
 WORKDIR /app
