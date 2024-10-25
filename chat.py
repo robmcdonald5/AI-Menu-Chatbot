@@ -14,14 +14,13 @@ from collections import Counter
 import os  # Import os module
 
 # Import the database connection
-from connect import database as db  # Make sure connect.py is in the same directory
+from connect import database as db  # Ensure connect.py is correctly set up with get_db()
 
 app = Flask(__name__, static_folder='frontend/build')  # Set static_folder to frontend/build
 CORS(app)
 
 # Load SpaCy model and Sentence-BERT model
 nlp = spacy.load('en_core_web_sm')
-#sentence_model = SentenceTransformer('all-MiniLM-L6-v2')
 sentence_model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
 
 # Toggleable debug mode
@@ -145,7 +144,7 @@ print("Hi I am an automated Chipotle AI menu, what would you like to order! (typ
 
 # Pushes Orders forward to check or null for next value
 def get_next_order_id(session_id):
-    last_order = db.Orders.find_one({"session_id": session_id}, sort=[("order_id", -1)])
+    last_order = db.get_db().Orders.find_one({"session_id": session_id}, sort=[("order_id", -1)])
     if last_order and "order_id" in last_order:
         return last_order["order_id"] + 1
     else:
@@ -154,7 +153,7 @@ def get_next_order_id(session_id):
 def check_missing_fields(session_id):
     session = session_data[session_id]
     # Only consider orders for this session that are not completed
-    orders = list(db.Orders.find({"session_id": session_id, "completed": False}))
+    orders = list(db.get_db().Orders.find({"session_id": session_id, "completed": False}))
     if DEBUG:
         print(f"[DEBUG] Orders with missing fields: {orders}")
     for order in orders:
@@ -171,21 +170,21 @@ def check_missing_fields(session_id):
 
 def update_order(session_id, order_id, field, value):
     if DEBUG:
-        order_before = db.Orders.find_one({"session_id": session_id, "order_id": order_id})
+        order_before = db.get_db().Orders.find_one({"session_id": session_id, "order_id": order_id})
         print(f"[DEBUG] Order before update: {order_before}")
-    result = db.Orders.update_one(
+    result = db.get_db().Orders.update_one(
         {"session_id": session_id, "order_id": order_id},
         {"$set": {field: value}}
     )
     if DEBUG:
         print(f"[DEBUG] Update result: matched {result.matched_count}, modified {result.modified_count}")
     # Check if order is now complete
-    order = db.Orders.find_one({"session_id": session_id, "order_id": order_id})
+    order = db.get_db().Orders.find_one({"session_id": session_id, "order_id": order_id})
     if DEBUG:
         print(f"[DEBUG] Updated order: {order}")
     required_fields = ["meats", "rice", "beans", "toppings"]
     if all(order.get(f) for f in required_fields):
-        db.Orders.update_one(
+        db.get_db().Orders.update_one(
             {"session_id": session_id, "order_id": order_id},
             {"$set": {"completed": True}}
         )
@@ -242,7 +241,7 @@ def process_order_spacy(session_id, input_sentence):
                 # Generate the next order_id for this session
                 order_id = get_next_order_id(session_id)
                 # Insert the order into the database
-                db.Orders.insert_one({
+                db.get_db().Orders.insert_one({
                     "session_id": session_id,
                     "order_id": order_id,
                     "item": item,
@@ -294,7 +293,7 @@ def extract_field_value(field, user_input):
         return None
 
 def display_current_order(session_id):
-    orders = list(db.Orders.find({"session_id": session_id}))
+    orders = list(db.get_db().Orders.find({"session_id": session_id}))
     if orders:
         response_lines = [f"Here is your current order:"]
         for order in orders:
@@ -321,10 +320,10 @@ def extract_order_ids(input_sentence):
 def remove_items_by_ids(session_id, order_ids):
     removed_items = []
     for oid in order_ids:
-        order = db.Orders.find_one({"session_id": session_id, "order_id": oid})
+        order = db.get_db().Orders.find_one({"session_id": session_id, "order_id": oid})
         if order:
             removed_items.append(f"{order['item']} (Order ID {oid})")
-            db.Orders.delete_one({"session_id": session_id, "order_id": oid})
+            db.get_db().Orders.delete_one({"session_id": session_id, "order_id": oid})
     return removed_items
 
 def extract_features(input_sentence):
@@ -374,11 +373,11 @@ def remove_items_by_features(session_id, features):
     if features["toppings"]:
         query["toppings"] = {"$in": features["toppings"]}
 
-    orders_to_remove = list(db.Orders.find(query))
+    orders_to_remove = list(db.get_db().Orders.find(query))
 
     for order in orders_to_remove:
         removed_items.append(f"{order['item']} (Order ID {order['order_id']})")
-        db.Orders.delete_one({"session_id": session_id, "order_id": order["order_id"]})
+        db.get_db().Orders.delete_one({"session_id": session_id, "order_id": order["order_id"]})
 
     return removed_items
 
@@ -415,7 +414,7 @@ def chat():
 
         # Delete orders associated with the old session_id
         if old_session_id:
-            db.Orders.delete_many({"session_id": old_session_id})
+            db.get_db().Orders.delete_many({"session_id": old_session_id})
             if DEBUG:
                 print(f"[DEBUG] Deleted orders for old session_id: {old_session_id}")
 
@@ -586,6 +585,7 @@ def serve_static(path):
     else:
         return send_from_directory(app.static_folder, 'index.html')
 
-#if __name__ == '__main__':
-#    port = int(os.environ.get("PORT", 5000))
-#    app.run(host='0.0.0.0', port=port)
+# Uncomment the following lines if you want to run the Flask app locally
+# if __name__ == '__main__':
+#     port = int(os.environ.get("PORT", 5000))
+#     app.run(host='0.0.0.0', port=port)

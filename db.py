@@ -1,12 +1,12 @@
+# db.py
 import os
-import time
 from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError
+import time
 
 class Database:
     def __init__(self, db_name):
-        self.uri = os.getenv('MONGODB_URI')  # Ensure this includes tls=true
-        print("Attempting to connect to MongoDB...")
+        self.uri = os.getenv('MONGODB_URI')  # Ensure this includes tls=true and the database name
         self.client = None
         self.db = None
         self.db_name = db_name
@@ -40,3 +40,8 @@ class Database:
                 print(f"Failed to list databases: {e}")
         else:
             print("Failed to connect to MongoDB after 3 attempts")
+
+    def get_db(self):
+        if self.db is None:
+            self.connect()
+        return self.db
