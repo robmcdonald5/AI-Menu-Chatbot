@@ -8,7 +8,7 @@ __pycache__/
 frontend/node_modules/
 
 # React build files (handled in multi-stage build)
-frontend/build/
+# frontend/build/
 
 # Git files
 .git
