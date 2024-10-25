@@ -581,5 +581,5 @@ def serve_static(path):
     else:
         return send_from_directory(app.static_folder, 'index.html')
 
-if __name__ == '__main__':
-    app.run(debug=False)
+#if __name__ == '__main__':
+#    app.run(debug=False)

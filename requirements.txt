@@ -8,4 +8,5 @@ sentence-transformers
 pysocks
 flask
 flask_cors
-waitress
+#waitress
+gunicore
