@@ -1,39 +1,42 @@
 import os
-import time  # Don't forget to import time if you're using sleep
+import time
 from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError
 
 class Database:
     def __init__(self, db_name):
-        self.uri = os.getenv('MONGODB_URI')  # Load MongoDB URI from environment variables
-        print(f"MongoDB URI: {self.uri}")  # Verify URI loading
+        self.uri = os.getenv('MONGODB_URI')  # Ensure this includes tls=true
+        print("Attempting to connect to MongoDB...")
         self.client = None
         self.db = None
         self.db_name = db_name
 
     def connect(self):
-        for attempt in range(3):  # Retry 3 times
+        for attempt in range(3):
             try:
                 print(f"Attempting to connect to MongoDB (Attempt {attempt + 1})")
-                self.client = MongoClient(self.uri)
+                self.client = MongoClient(
+                    self.uri,
+                    serverSelectionTimeoutMS=30000,
+                    socketTimeoutMS=30000,
+                    tls=True  # Ensure TLS is enabled
+                )
                 self.db = self.client[self.db_name]
+                # Force a connection to verify settings
+                self.client.admin.command('ping')
                 print("MongoDB connection successful!")
                 break
             except ServerSelectionTimeoutError as e:
                 print(f"MongoDB connection failed on attempt {attempt + 1}: {e}")
-                time.sleep(5)  # Wait before retrying
+                time.sleep(5)
             except Exception as e:
                 print(f"MongoDB connection failed: {e}")
-        
-        # Correctly check if self.db is not None after connection attempts
+
         if self.db is not None:
-            print("MongoDB connection successful!")
+            print("MongoDB connection confirmed.")
             try:
-                print(f"Databases: {self.client.list_database_names()}")
+                print("Databases connected successfully.")
             except Exception as e:
                 print(f"Failed to list databases: {e}")
         else:
             print("Failed to connect to MongoDB after 3 attempts")
-
-    def get_db(self):
-        return self.db

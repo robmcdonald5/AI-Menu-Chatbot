@@ -391,9 +391,14 @@ def predict_intent_with_clustering(user_input):
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    data = request.json
-    if not data or 'message' not in data:
-        return jsonify({"response": "No message provided"}), 400
+    try:
+        data = request.json
+        if not data or 'message' not in data:
+            return jsonify({"response": "No message provided"}), 400
+
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        return jsonify({"response": "An internal error occurred. Please try again later."}), 500
 
     sentence = data.get("message")
     session_id = data.get("session_id")

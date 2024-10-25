@@ -70,4 +70,11 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:$PORT/ || exit 1
 
 # Command to run the application using Waitress (Shell Form for variable expansion)
-CMD waitress-serve --port=$PORT chat:app
+CMD waitress-serve \
+    --listen="*:${PORT}" \
+    --trusted-proxy='*' \
+    --trusted-proxy-headers='x-forwarded-for x-forwarded-proto x-forwarded-port' \
+    --log-untrusted-proxy-headers \
+    --clear-untrusted-proxy-headers \
+    --threads=${WEB_CONCURRENCY:-2} \
+    chat:app
