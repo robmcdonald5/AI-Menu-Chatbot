@@ -1,3 +1,21 @@
+# === Stage 1: Build React Frontend ===
+FROM node:18-alpine AS frontend-builder
+
+# Set working directory
+WORKDIR /frontend
+
+# Copy frontend dependency files
+COPY frontend/package.json frontend/package-lock.json ./
+
+# Install frontend dependencies
+RUN npm install
+
+# Copy frontend source code
+COPY frontend/ ./
+
+# Build the React app for production
+RUN npm run build
+
 # === Stage 2: Setup Python Backend ===
 FROM python:3.12-slim
 
