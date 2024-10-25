@@ -1,1 +1,1 @@
-web: python chat.py
+web: gunicorn --bind 0.0.0.0:$PORT chat:app
