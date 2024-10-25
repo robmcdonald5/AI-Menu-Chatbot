@@ -76,7 +76,7 @@ session_data = {}
 # Fetch menu data from the database
 def fetch_menu_data():
     # Fetch main menu items with case-insensitive matching and handle arrays
-    main_items_cursor = db.MenuItem.find({
+    main_items_cursor = db.get_db()['MenuItem']({
         '$or': [
             {'category': {'$regex': '^main$', '$options': 'i'}},
             {'category': {'$elemMatch': {'$regex': '^main$', '$options': 'i'}}}
