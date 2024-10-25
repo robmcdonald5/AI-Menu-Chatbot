@@ -17,7 +17,17 @@ import os  # Import os module
 from connect import database as db  # Ensure connect.py is correctly set up with get_db()
 
 app = Flask(__name__, static_folder='frontend/build')  # Set static_folder to frontend/build
-CORS(app, resources={r"/*": {"origins": ["https://chipotleaimenu.app"]}})
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+
+# CORS debug
+@app.before_request
+def handle_options_requests():
+    if request.method == "OPTIONS":
+        response = jsonify({"message": "Options request allowed"})
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
+        response.headers.add("Access-Control-Allow-Methods", "POST, OPTIONS")
+        return response
 
 # Load SpaCy model and Sentence-BERT model
 nlp = spacy.load('en_core_web_sm')
