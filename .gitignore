@@ -7,7 +7,7 @@
 # Allow specific files
 !chat.py
 !connect.py
-!db.py
+!database.py
 !intents.json
 !Dockerfile
 !heroku.yml

@@ -43,7 +43,11 @@ function App() {
         dataToSend.session_id = sessionId;
       }
 
-      const response = await axios.post("http://localhost:5000/chat", dataToSend);
+      const baseURL = process.env.NODE_ENV == "production"
+        ? "https://chipotleaimenu.herokuapp.com" 
+        : "http://localhost:5000";
+      
+      const response = await axios.post(`${baseURL}/chat`, dataToSend);
 
       const gptMessage = { text: response.data.response, sender: "chipotle" };
       setMessages((prev) => [...prev, gptMessage]);
