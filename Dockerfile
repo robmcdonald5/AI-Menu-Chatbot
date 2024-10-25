@@ -1,27 +1,10 @@
-# === Stage 1: Build React Frontend ===
-FROM node:18-alpine AS frontend-builder
-
-# Set working directory
-WORKDIR /frontend
-
-# Copy frontend dependency files
-COPY frontend/package.json frontend/package-lock.json ./
-
-# Install frontend dependencies
-RUN npm install
-
-# Copy frontend source code
-COPY frontend/ ./
-
-# Build the React app for production
-RUN npm run build
-
 # === Stage 2: Setup Python Backend ===
 FROM python:3.12-slim
 
 # Set environment variables for Python
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV LOKY_MAX_CPU_COUNT=2  # Set desired CPU count to silence Joblib warning
 
 # Set working directory
 WORKDIR /app
@@ -61,13 +44,12 @@ RUN chown -R appuser:appgroup /app
 # Switch to non-root user
 USER appuser
 
-# Set the PORT environment variable (default to 5000)
-ENV PORT=5000
+# Expose the port (optional since Heroku manages it)
 EXPOSE $PORT
 
 # Health check (optional but recommended)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:$PORT/ || exit 1
 
-# Command to run the application using Waitress
+# Command to run the application using Waitress (Shell Form for variable expansion)
 CMD waitress-serve --port=$PORT chat:app
