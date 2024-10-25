@@ -50,7 +50,7 @@ ENV SPACY_DATA=/usr/local/lib/python3.12/site-packages
 # Create a non-root user for security
 RUN addgroup --system appgroup && adduser --system appuser --ingroup appgroup
 
-# Copy backend source code, including connect.py and db.py
+# Copy backend source code, including connect.py and database.py
 COPY . .
 
 # Copy the built frontend from the previous stage
