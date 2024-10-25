@@ -70,4 +70,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:$PORT/ || exit 1
 
 # Command to run the application using Waitress
-CMD ["waitress-serve", "--port=$PORT", "chat:app"]
+CMD ["waitress-serve", "--port=5000", "chat:app"]
