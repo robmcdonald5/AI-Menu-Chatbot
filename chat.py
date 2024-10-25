@@ -76,8 +76,12 @@ session_data = {}
 # Fetch menu data from the database
 def fetch_menu_data():
     db_instance = db.get_db()
+
+    # Access the MenuItem collection
+    menu_item_collection = db_instance['MenuItem']
+
     # Fetch main menu items with case-insensitive matching and handle arrays
-    main_items_cursor = db_instance['MenuItem'].find({
+    main_items_cursor = menu_item_collection.find({
         '$or': [
             {'category': {'$regex': '^main$', '$options': 'i'}},
             {'category': {'$elemMatch': {'$regex': '^main$', '$options': 'i'}}}
@@ -95,11 +99,14 @@ def fetch_menu_data():
         else:
             menu[name] = 0  # Default price if not available
 
+    if DEBUG:
+        print(f"[DEBUG] Menu items: {list(menu.keys())}")
+
     # Fetch addons and normalize names to lowercase
-    meats = [item['name'].lower() for item in db_instance['MenuItem'].find({'category': {'$regex': '^protein$', '$options': 'i'}})]
-    rice = [item['name'].lower() for item in db_instance['MenuItem'].find({'category': {'$regex': '^rice$', '$options': 'i'}})]
-    beans = [item['name'].lower() for item in db_instance['MenuItem'].find({'category': {'$regex': '^beans$', '$options': 'i'}})]
-    toppings = [item['name'].lower() for item in db_instance['MenuItem'].find({'category': {'$regex': '^toppings$', '$options': 'i'}})]
+    meats = [item['name'].lower() for item in menu_item_collection.find({'category': {'$regex': '^protein$', '$options': 'i'}})]
+    rice = [item['name'].lower() for item in menu_item_collection.find({'category': {'$regex': '^rice$', '$options': 'i'}})]
+    beans = [item['name'].lower() for item in menu_item_collection.find({'category': {'$regex': '^beans$', '$options': 'i'}})]
+    toppings = [item['name'].lower() for item in menu_item_collection.find({'category': {'$regex': '^toppings$', '$options': 'i'}})]
 
     if DEBUG:
         print(f"[DEBUG] Meats list: {meats}")
@@ -108,7 +115,7 @@ def fetch_menu_data():
         print(f"[DEBUG] Toppings list: {toppings}")
 
         # Fetch all items and collect categories
-        all_items = list(db_instance['MenuItem'].find({}))
+        all_items = list(menu_item_collection.find({}))
         categories_set = set()
         for item in all_items:
             if 'category' in item:
