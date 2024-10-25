@@ -17,7 +17,7 @@ import os  # Import os module
 from connect import database as db  # Ensure connect.py is correctly set up with get_db()
 
 app = Flask(__name__, static_folder='frontend/build')  # Set static_folder to frontend/build
-CORS(app)
+CORS(app, resources={r"/*": {"origins": ["https://chipotleaimenu.app"]}})
 
 # Load SpaCy model and Sentence-BERT model
 nlp = spacy.load('en_core_web_sm')
