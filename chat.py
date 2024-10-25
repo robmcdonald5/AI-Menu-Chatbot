@@ -14,7 +14,7 @@ from collections import Counter
 import os  # Import os module
 
 # Import the database connection
-from connect import db  # Make sure connect.py is in the same directory
+from connect import database as db  # Make sure connect.py is in the same directory
 
 app = Flask(__name__, static_folder='frontend/build')  # Set static_folder to frontend/build
 CORS(app)
