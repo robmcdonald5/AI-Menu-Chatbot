@@ -1,11 +1,11 @@
 torch
 nltk
 numpy
-pymongo>=3.9
+pymongo>=4.10
 spacy
 scikit-learn
 sentence-transformers
 pysocks
-gunicorn
 flask
 flask_cors
+waitress
