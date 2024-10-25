@@ -1,7 +1,7 @@
 torch
 nltk
 numpy
-pymongo>=3.11.0
+pymongo>=3.9
 spacy
 scikit-learn
 sentence-transformers

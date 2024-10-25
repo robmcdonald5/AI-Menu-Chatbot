@@ -65,6 +65,3 @@ EXPOSE $PORT
 # Health check (optional but recommended)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:$PORT/ || exit 1
-
-# Define the command to run the application using Gunicorn in shell form
-CMD sh -c "gunicorn chat:app --workers 1 --bind 0.0.0.0:$PORT"

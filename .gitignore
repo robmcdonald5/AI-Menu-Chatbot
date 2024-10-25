@@ -12,6 +12,7 @@
 !Dockerfile
 !heroku.yml
 !requirements.txt
+!Procfile
 
 # Allow Git configuration and ignore rules
 !.gitignore

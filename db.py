@@ -1,8 +1,7 @@
 import os
+import time  # Don't forget to import time if you're using sleep
 from pymongo import MongoClient
-import socks
-import socket
-from urllib.parse import urlparse
+from pymongo.errors import ServerSelectionTimeoutError
 
 class Database:
     def __init__(self, db_name):
@@ -13,40 +12,28 @@ class Database:
         self.db_name = db_name
 
     def connect(self):
-        try:
-            # Check if PROXIMO_URL is set
-            prox_url = os.getenv('PROXIMO_URL')
-            if prox_url:
-                parsed = urlparse(prox_url)
-                proxy_host = parsed.hostname
-                proxy_port = parsed.port
-                proxy_username = parsed.username
-                proxy_password = parsed.password
-
-                # Configure SOCKS5 proxy with authentication
-                print(f"Configuring Proximo SOCKS5 proxy: {proxy_host}:{proxy_port}")
-                socks.set_default_proxy(
-                    socks.SOCKS5,
-                    proxy_host,
-                    proxy_port,
-                    username=proxy_username,
-                    password=proxy_password
-                )
-                socket.socket = socks.socksocket
-
-                print(f"Configured to use Proximo SOCKS5 proxy at {proxy_host}:{proxy_port}")
-            else:
-                print("No Proximo proxy configured. Proceeding without a proxy.")
-
-            # Initialize MongoDB client
-            print(f"Attempting to connect to MongoDB with URI: {self.uri}")
-            self.client = MongoClient(self.uri)
-            self.db = self.client[self.db_name]
-
-            # Log connection status
+        for attempt in range(3):  # Retry 3 times
+            try:
+                print(f"Attempting to connect to MongoDB (Attempt {attempt + 1})")
+                self.client = MongoClient(self.uri)
+                self.db = self.client[self.db_name]
+                print("MongoDB connection successful!")
+                break
+            except ServerSelectionTimeoutError as e:
+                print(f"MongoDB connection failed on attempt {attempt + 1}: {e}")
+                time.sleep(5)  # Wait before retrying
+            except Exception as e:
+                print(f"MongoDB connection failed: {e}")
+        
+        # Correctly check if self.db is not None after connection attempts
+        if self.db is not None:
             print("MongoDB connection successful!")
-        except Exception as e:
-            print("MongoDB connection failed:", e)
+            try:
+                print(f"Databases: {self.client.list_database_names()}")
+            except Exception as e:
+                print(f"Failed to list databases: {e}")
+        else:
+            print("Failed to connect to MongoDB after 3 attempts")
 
     def get_db(self):
         return self.db
