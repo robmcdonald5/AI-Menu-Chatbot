@@ -398,7 +398,7 @@ def predict_intent_with_clustering(user_input):
     predicted_intent = cluster_to_intent.get(cluster_id, None)
     return predicted_intent
 
-@app.route('/chat', methods=['POST'])
+@app.route('/chat', methods=['POST', 'OPTIONS'])
 def chat():
     try:
         data = request.json
