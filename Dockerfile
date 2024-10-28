@@ -22,7 +22,7 @@ FROM python:3.12-slim
 # Set environment variables for Python
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV LOKY_MAX_CPU_COUNT=2
+ENV LOKY_MAX_CPU_COUNT=1
 
 # Set working directory
 WORKDIR /app
@@ -76,5 +76,5 @@ CMD waitress-serve \
     --trusted-proxy-headers='x-forwarded-for x-forwarded-proto x-forwarded-port' \
     --log-untrusted-proxy-headers \
     --clear-untrusted-proxy-headers \
-    --threads=${WEB_CONCURRENCY:-2} \
+    --threads=${WEB_CONCURRENCY:-1} \
     chat:app
