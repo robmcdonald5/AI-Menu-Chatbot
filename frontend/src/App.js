@@ -44,7 +44,7 @@ function App() {
       }
 
       const baseURL = process.env.NODE_ENV == "production"
-        ? "https://chipotleaimenu.herokuapp.com" 
+        ? "https://chipotleaimenu.app" 
         : "http://localhost:5000";
       
       const response = await axios.post(`${baseURL}/chat`, dataToSend);
