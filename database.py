@@ -2,31 +2,13 @@ import os
 from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError
 import time
-import socks
+import socks  # Import PySocks
 import socket
 from urllib.parse import urlparse
 
-def create_socks5_socket_factory(proxy_url):
-    parsed = urlparse(proxy_url)
-
-    def socks5_socket(*args):
-        sock = socks.socksocket()
-        sock.set_proxy(
-            socks.SOCKS5,
-            addr=parsed.hostname,
-            port=parsed.port,
-            username=parsed.username,
-            password=parsed.password,
-            rdns=True
-        )
-        sock.connect(args[0])
-        return sock
-
-    return socks5_socket
-
 class Database:
     def __init__(self, db_name):
-        self.uri = os.getenv('MONGODB_URI')
+        self.uri = os.getenv('MONGODB_URI')  # Ensure this includes tls=true and the database name
         self.client = None
         self.db = None
         self.db_name = db_name
@@ -36,24 +18,28 @@ class Database:
             try:
                 print(f"Attempting to connect to MongoDB (Attempt {attempt + 1})")
 
-                # Set up custom socket factory if QUOTAGUARDSTATIC_URL is set
-                quotaguard_url = os.getenv('QUOTAGUARDSTATIC_URL')
+                # Set up SOCKS5 proxy if QUOTAGUARDSTATIC_SOCKS5_URL is set
+                quotaguard_url = os.getenv('QUOTAGUARDSTATIC_SOCKS5_URL')
                 if quotaguard_url:
-                    socket_factory = create_socks5_socket_factory(quotaguard_url)
-                    self.client = MongoClient(
-                        self.uri,
-                        serverSelectionTimeoutMS=30000,
-                        socketTimeoutMS=30000,
-                        tls=True,
-                        socketFactory=socket_factory
+                    parsed = urlparse(quotaguard_url)
+                    if parsed.scheme != 'socks5':
+                        raise ValueError(f"Unsupported proxy scheme {parsed.scheme}")
+                    socks.setdefaultproxy(
+                        socks.PROXY_TYPE_SOCKS5,
+                        parsed.hostname,
+                        parsed.port,
+                        True,  # rdns: Set to True to resolve DNS names through the proxy
+                        parsed.username,
+                        parsed.password
                     )
-                else:
-                    self.client = MongoClient(
-                        self.uri,
-                        serverSelectionTimeoutMS=30000,
-                        socketTimeoutMS=30000,
-                        tls=True
-                    )
+                    socket.socket = socks.socksocket  # Monkey patch socket module
+
+                self.client = MongoClient(
+                    self.uri,
+                    serverSelectionTimeoutMS=30000,
+                    socketTimeoutMS=30000,
+                    tls=True  # Ensure TLS is enabled
+                )
 
                 self.db = self.client[self.db_name]
                 # Force a connection to verify settings
@@ -68,6 +54,10 @@ class Database:
 
         if self.db is not None:
             print("MongoDB connection confirmed.")
+            try:
+                print("Databases connected successfully.")
+            except Exception as e:
+                print(f"Failed to list databases: {e}")
         else:
             print("Failed to connect to MongoDB after 3 attempts")
 
