@@ -9,4 +9,3 @@ pysocks
 flask
 flask_cors
 waitress
-#gunicorn

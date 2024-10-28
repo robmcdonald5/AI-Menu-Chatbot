@@ -1,4 +1,3 @@
-# connect.py
 from database import Database
 
 # Initialize the Database object with only the database name
