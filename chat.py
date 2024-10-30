@@ -417,35 +417,14 @@ def chat():
     session_id = data.get("session_id")
 
     # Handle session management
-    if not session_id or session_id not in session_data:
-        old_session_id = session_id  # Save old session_id if any
-        # Generate a new session_id and initialize session data
-        session_id = str(uuid.uuid4())
-        session_data[session_id] = {
-            "is_fixing": False,
-            "missing_field_context": {},
-            "chat_length": 0,
-            "last_activity": datetime.utcnow()
-        }
-
-        # Delete orders associated with the old session_id
-        if old_session_id:
-            db.get_db().Orders.delete_many({"session_id": old_session_id})
-            if DEBUG:
-                print(f"[DEBUG] Deleted orders for old session_id: {old_session_id}")
-
-        if DEBUG:
-            print(f"[DEBUG] New session created with session_id: {session_id}")
-    else:
-        # Check for session inactivity
+    if session_id and session_id in session_data:
+        # Existing session
         last_activity = session_data[session_id].get('last_activity', datetime.utcnow())
         if datetime.utcnow() - last_activity > INACTIVITY_TIMEOUT:
             # Session has been inactive for more than 5 minutes
-            # Delete orders associated with the session
             db.get_db().Orders.delete_many({"session_id": session_id})
             if DEBUG:
                 print(f"[DEBUG] Session {session_id} has been inactive for over 5 minutes. Orders deleted.")
-            # Reset session data
             session_data[session_id] = {
                 "is_fixing": False,
                 "missing_field_context": {},
@@ -457,6 +436,22 @@ def chat():
             session_data[session_id]['last_activity'] = datetime.utcnow()
             if DEBUG:
                 print(f"[DEBUG] Existing session found with session_id: {session_id}")
+    else:
+        # Create new session
+        old_session_id = session_id if session_id else None
+        session_id = str(uuid.uuid4())
+        session_data[session_id] = {
+            "is_fixing": False,
+            "missing_field_context": {},
+            "chat_length": 0,
+            "last_activity": datetime.utcnow()
+        }
+        if old_session_id:
+            db.get_db().Orders.delete_many({"session_id": old_session_id})
+            if DEBUG:
+                print(f"[DEBUG] Deleted orders for old session_id: {old_session_id}")
+        if DEBUG:
+            print(f"[DEBUG] New session created with session_id: {session_id}")
 
     session = session_data[session_id]
     is_fixing = session["is_fixing"]

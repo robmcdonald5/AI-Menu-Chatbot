@@ -1,6 +1,6 @@
 //import logo from "./logo.svg";
 import "./App.css";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import axios from "axios";
 
 function App() {
@@ -10,10 +10,15 @@ function App() {
   const [showPopup, setShowPopup] = useState(true);
   const [slideOff, setSlideOff] = useState(false);
 
-  // Initialize sessionId from localStorage
-  const [sessionId, setSessionId] = useState(() => {
-    return localStorage.getItem("session_id");
-  });
+  const [sessionId, setSessionId] = useState(null);
+
+  // Initialize sessionId from localStorage when the component mounts
+  useEffect(() => {
+    const storedSessionId = localStorage.getItem("session_id");
+    if (storedSessionId) {
+      setSessionId(storedSessionId);
+    }
+  }, []);
 
   const handleContinue = () => {
     setSlideOff(true); // Start the slide animation
@@ -36,17 +41,14 @@ function App() {
       // Prepare the data to send
       const dataToSend = {
         message: userInput,
+        session_id: sessionId, // Include session_id in the request
       };
 
-      // Include session_id if it's already available
-      if (sessionId) {
-        dataToSend.session_id = sessionId;
-      }
+      const baseURL =
+        process.env.NODE_ENV === "production"
+          ? "https://chipotleaimenu.app"
+          : "http://localhost:5000";
 
-      const baseURL = process.env.NODE_ENV == "production"
-        ? "https://chipotleaimenu.app" 
-        : "http://localhost:5000";
-      
       const response = await axios.post(`${baseURL}/chat`, dataToSend);
 
       const gptMessage = { text: response.data.response, sender: "chipotle" };
@@ -59,7 +61,10 @@ function App() {
       }
     } catch (error) {
       console.error("Error sending message:", error);
-      const errorMessage = { text: "Sorry, there was an error. Please try again.", sender: "chipotle" };
+      const errorMessage = {
+        text: "Sorry, there was an error. Please try again.",
+        sender: "chipotle",
+      };
       setMessages((prev) => [...prev, errorMessage]);
     }
 
