@@ -11,7 +11,8 @@ from sklearn.cluster import KMeans
 from spacy.matcher import PhraseMatcher
 from sentence_transformers import SentenceTransformer
 from collections import Counter
-import os  # Import os module
+import os
+from datetime import datetime, timedelta
 
 # Import the database connection
 from connect import database as db  # Ensure connect.py is correctly set up with get_db()
@@ -398,6 +399,9 @@ def predict_intent_with_clustering(user_input):
     predicted_intent = cluster_to_intent.get(cluster_id, None)
     return predicted_intent
 
+# Define the inactivity timeout
+INACTIVITY_TIMEOUT = timedelta(minutes=5)
+
 @app.route('/chat', methods=['POST', 'OPTIONS'])
 def chat():
     try:
@@ -412,6 +416,7 @@ def chat():
     sentence = data.get("message")
     session_id = data.get("session_id")
 
+    # Handle session management
     if not session_id or session_id not in session_data:
         old_session_id = session_id  # Save old session_id if any
         # Generate a new session_id and initialize session data
@@ -419,7 +424,8 @@ def chat():
         session_data[session_id] = {
             "is_fixing": False,
             "missing_field_context": {},
-            "chat_length": 0
+            "chat_length": 0,
+            "last_activity": datetime.utcnow()
         }
 
         # Delete orders associated with the old session_id
@@ -431,8 +437,26 @@ def chat():
         if DEBUG:
             print(f"[DEBUG] New session created with session_id: {session_id}")
     else:
-        if DEBUG:
-            print(f"[DEBUG] Existing session found with session_id: {session_id}")
+        # Check for session inactivity
+        last_activity = session_data[session_id].get('last_activity', datetime.utcnow())
+        if datetime.utcnow() - last_activity > INACTIVITY_TIMEOUT:
+            # Session has been inactive for more than 5 minutes
+            # Delete orders associated with the session
+            db.get_db().Orders.delete_many({"session_id": session_id})
+            if DEBUG:
+                print(f"[DEBUG] Session {session_id} has been inactive for over 5 minutes. Orders deleted.")
+            # Reset session data
+            session_data[session_id] = {
+                "is_fixing": False,
+                "missing_field_context": {},
+                "chat_length": 0,
+                "last_activity": datetime.utcnow()
+            }
+        else:
+            # Update last activity time
+            session_data[session_id]['last_activity'] = datetime.utcnow()
+            if DEBUG:
+                print(f"[DEBUG] Existing session found with session_id: {session_id}")
 
     session = session_data[session_id]
     is_fixing = session["is_fixing"]
@@ -565,6 +589,35 @@ def chat():
                     responses.append(random.choice(intent['responses']))
                     # Modification code would go here
 
+                elif predicted_tag == "checkout":
+                    # Delete the session's orders
+                    db.get_db().Orders.delete_many({"session_id": session_id})
+                    if DEBUG:
+                        print(f"[DEBUG] Orders for session {session_id} have been deleted upon checkout.")
+                    responses.append(random.choice(intent['responses']))
+                    responses.append("Your orders have been submitted and the session has been reset.")
+                    # Reset session data
+                    session_data[session_id] = {
+                        "is_fixing": False,
+                        "missing_field_context": {},
+                        "chat_length": 0,
+                        "last_activity": datetime.utcnow()
+                    }
+
+                elif predicted_tag == "restart":
+                    # Delete the session's orders
+                    db.get_db().Orders.delete_many({"session_id": session_id})
+                    if DEBUG:
+                        print(f"[DEBUG] Orders for session {session_id} have been reset by user request.")
+                    responses.append(random.choice(intent['responses']))
+                    # Reset session data but keep the same session_id
+                    session_data[session_id] = {
+                        "is_fixing": False,
+                        "missing_field_context": {},
+                        "chat_length": 0,
+                        "last_activity": datetime.utcnow()
+                    }
+
                 else:
                     if is_fixing:
                         field = session["missing_field_context"]["field"]
@@ -579,6 +632,7 @@ def chat():
     # Update session data
     session_data[session_id]["is_fixing"] = is_fixing
     session_data[session_id]["chat_length"] = chat_length
+    session_data[session_id]["last_activity"] = datetime.utcnow()
 
     return jsonify({"response": "\n".join(responses), "session_id": session_id})
 

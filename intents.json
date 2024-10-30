@@ -110,6 +110,21 @@
       ]
     },
     {
+      "tag": "restart",
+      "patterns": [
+        "Reset my order",
+        "Start over",
+        "Restart order",
+        "Clear my cart",
+        "I want to start again",
+        "Delete my current order"
+      ],
+      "responses": [
+        "Your order has been reset. You can start a new order.",
+        "I've cleared your order. Let's begin again."
+      ]
+    },    
+    {
       "tag": "thanks",
       "patterns": [
         "Thank you",
