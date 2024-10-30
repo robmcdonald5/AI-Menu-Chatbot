@@ -12,23 +12,13 @@ from spacy.matcher import PhraseMatcher
 from sentence_transformers import SentenceTransformer
 from collections import Counter
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta  # Import datetime modules
 
 # Import the database connection
 from connect import database as db  # Ensure connect.py is correctly set up with get_db()
 
 app = Flask(__name__, static_folder='frontend/build')  # Set static_folder to frontend/build
 CORS(app, resources={r"/*": {"origins": ["https://chipotleaimenu.app"]}}, supports_credentials=True)
-
-# CORS debug
-#@app.before_request
-#def handle_options_requests():
-#    if request.method == "OPTIONS":
-#        response = jsonify({"message": "Options request allowed"})
-#        response.headers.add("Access-Control-Allow-Origin", "*")
-#        response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
-#        response.headers.add("Access-Control-Allow-Methods", "POST, OPTIONS")
-#        return response
 
 # Load SpaCy model and Sentence-BERT model
 nlp = spacy.load('en_core_web_sm')
@@ -79,9 +69,6 @@ for cluster_id in range(num_clusters):
 
 if DEBUG:
     print(f"[DEBUG] Cluster to Intent Mapping: {cluster_to_intent}")
-
-# Session data storage
-session_data = {}
 
 # Fetch menu data from the database
 def fetch_menu_data():
@@ -161,8 +148,8 @@ def get_next_order_id(session_id):
     else:
         return 1
 
-def check_missing_fields(session_id):
-    session = session_data[session_id]
+def check_missing_fields(session):
+    session_id = session['session_id']
     # Only consider orders for this session that are not completed
     orders = list(db.get_db().Orders.find({"session_id": session_id, "completed": False}))
     if DEBUG:
@@ -416,47 +403,67 @@ def chat():
     sentence = data.get("message")
     session_id = data.get("session_id")
 
-    # Handle session management
-    if session_id and session_id in session_data:
-        # Existing session
-        last_activity = session_data[session_id].get('last_activity', datetime.utcnow())
-        if datetime.utcnow() - last_activity > INACTIVITY_TIMEOUT:
-            # Session has been inactive for more than 5 minutes
-            db.get_db().Orders.delete_many({"session_id": session_id})
-            if DEBUG:
-                print(f"[DEBUG] Session {session_id} has been inactive for over 5 minutes. Orders deleted.")
-            session_data[session_id] = {
-                "is_fixing": False,
-                "missing_field_context": {},
-                "chat_length": 0,
-                "last_activity": datetime.utcnow()
-            }
+    db_instance = db.get_db()
+    sessions_collection = db_instance['Sessions']
+
+    # Retrieve or create session data
+    if session_id:
+        session = sessions_collection.find_one({'session_id': session_id})
+        if session:
+            # Existing session
+            last_activity = session.get('last_activity', datetime.utcnow())
+            if datetime.utcnow() - last_activity > INACTIVITY_TIMEOUT:
+                # Session has been inactive for more than 5 minutes
+                db_instance.Orders.delete_many({'session_id': session_id})
+                if DEBUG:
+                    print(f"[DEBUG] Session {session_id} has been inactive for over 5 minutes. Orders deleted.")
+                # Reset session data
+                session = {
+                    'session_id': session_id,
+                    'is_fixing': False,
+                    'missing_field_context': {},
+                    'chat_length': 0,
+                    'last_activity': datetime.utcnow()
+                }
+                sessions_collection.replace_one({'session_id': session_id}, session, upsert=True)
+            else:
+                # Update last_activity
+                sessions_collection.update_one(
+                    {'session_id': session_id},
+                    {'$set': {'last_activity': datetime.utcnow()}}
+                )
+                session['last_activity'] = datetime.utcnow()
+                if DEBUG:
+                    print(f"[DEBUG] Existing session found with session_id: {session_id}")
         else:
-            # Update last activity time
-            session_data[session_id]['last_activity'] = datetime.utcnow()
+            # Session data not found in database, create new session
+            session = {
+                'session_id': session_id,
+                'is_fixing': False,
+                'missing_field_context': {},
+                'chat_length': 0,
+                'last_activity': datetime.utcnow()
+            }
+            sessions_collection.insert_one(session)
             if DEBUG:
-                print(f"[DEBUG] Existing session found with session_id: {session_id}")
+                print(f"[DEBUG] Session data not found, created new session with session_id: {session_id}")
     else:
-        # Create new session
-        old_session_id = session_id if session_id else None
+        # No session_id provided, create new session
         session_id = str(uuid.uuid4())
-        session_data[session_id] = {
-            "is_fixing": False,
-            "missing_field_context": {},
-            "chat_length": 0,
-            "last_activity": datetime.utcnow()
+        session = {
+            'session_id': session_id,
+            'is_fixing': False,
+            'missing_field_context': {},
+            'chat_length': 0,
+            'last_activity': datetime.utcnow()
         }
-        if old_session_id:
-            db.get_db().Orders.delete_many({"session_id": old_session_id})
-            if DEBUG:
-                print(f"[DEBUG] Deleted orders for old session_id: {old_session_id}")
+        sessions_collection.insert_one(session)
         if DEBUG:
             print(f"[DEBUG] New session created with session_id: {session_id}")
 
-    session = session_data[session_id]
-    is_fixing = session["is_fixing"]
-    missing_field_context = session["missing_field_context"]
-    chat_length = session["chat_length"]
+    is_fixing = session.get("is_fixing", False)
+    missing_field_context = session.get("missing_field_context", {})
+    chat_length = session.get("chat_length", 0)
 
     cleaned_sentence = clean_sentence(sentence)
 
@@ -482,17 +489,18 @@ def chat():
             update_msg = update_order(session_id, order_id_fix, field, value)
             responses.append(update_msg)
             # After updating, check if there are more missing fields
-            missing_fields_response = check_missing_fields(session_id)
+            missing_fields_response = check_missing_fields(session)
             if missing_fields_response:
                 responses.append(missing_fields_response)
             else:
                 responses.append("Anything else I can help with?")
 
             # Update is_fixing after checking for missing fields
-            is_fixing = session_data[session_id]["is_fixing"]
+            is_fixing = session.get("is_fixing", False)
 
-            if not is_fixing:
-                responses.append("Anything else I can help with?")
+            # Update session data in the database
+            sessions_collection.replace_one({'session_id': session_id}, session, upsert=True)
+
             return jsonify({"response": "\n".join(responses), "session_id": session_id})
         else:
             # Try to predict intent even when is_fixing is True
@@ -532,14 +540,14 @@ def chat():
                     responses.append(response)
                     if DEBUG:
                         print(f"[DEBUG] Current orders in DB")
-                    missing_fields_response = check_missing_fields(session_id)
+                    missing_fields_response = check_missing_fields(session)
                     if missing_fields_response:
                         responses.append(missing_fields_response)
                     else:
                         responses.append("Anything else I can help with?")
 
                     # Update is_fixing after checking for missing fields
-                    is_fixing = session_data[session_id]["is_fixing"]
+                    is_fixing = session.get("is_fixing", False)
 
                 elif predicted_tag == "remove_id" and not is_fixing:
                     order_ids = extract_order_ids(sentence)
@@ -571,7 +579,7 @@ def chat():
                     responses.append(display_details)
 
                     # Update is_fixing after displaying the order
-                    is_fixing = session_data[session_id]["is_fixing"]
+                    is_fixing = session.get("is_fixing", False)
 
                     if is_fixing:
                         field = session["missing_field_context"]["field"]
@@ -592,12 +600,14 @@ def chat():
                     responses.append(random.choice(intent['responses']))
                     responses.append("Your orders have been submitted and the session has been reset.")
                     # Reset session data
-                    session_data[session_id] = {
-                        "is_fixing": False,
-                        "missing_field_context": {},
-                        "chat_length": 0,
-                        "last_activity": datetime.utcnow()
+                    session = {
+                        'session_id': session_id,
+                        'is_fixing': False,
+                        'missing_field_context': {},
+                        'chat_length': 0,
+                        'last_activity': datetime.utcnow()
                     }
+                    sessions_collection.replace_one({'session_id': session_id}, session, upsert=True)
 
                 elif predicted_tag == "restart":
                     # Delete the session's orders
@@ -606,12 +616,14 @@ def chat():
                         print(f"[DEBUG] Orders for session {session_id} have been reset by user request.")
                     responses.append(random.choice(intent['responses']))
                     # Reset session data but keep the same session_id
-                    session_data[session_id] = {
-                        "is_fixing": False,
-                        "missing_field_context": {},
-                        "chat_length": 0,
-                        "last_activity": datetime.utcnow()
+                    session = {
+                        'session_id': session_id,
+                        'is_fixing': False,
+                        'missing_field_context': {},
+                        'chat_length': 0,
+                        'last_activity': datetime.utcnow()
                     }
+                    sessions_collection.replace_one({'session_id': session_id}, session, upsert=True)
 
                 else:
                     if is_fixing:
@@ -625,9 +637,12 @@ def chat():
         responses.append("I do not understand...")
 
     # Update session data
-    session_data[session_id]["is_fixing"] = is_fixing
-    session_data[session_id]["chat_length"] = chat_length
-    session_data[session_id]["last_activity"] = datetime.utcnow()
+    session['is_fixing'] = is_fixing
+    session['chat_length'] = chat_length
+    session['last_activity'] = datetime.utcnow()
+
+    # Save session data back to the database
+    sessions_collection.replace_one({'session_id': session_id}, session, upsert=True)
 
     return jsonify({"response": "\n".join(responses), "session_id": session_id})
 
