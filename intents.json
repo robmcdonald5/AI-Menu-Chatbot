@@ -3,18 +3,19 @@
     {
       "tag": "greeting",
       "patterns": [
+        "Hello",
+        "Hi",
+        "Hey",
+        "Greetings",
         "Good morning",
         "Good afternoon",
         "Good evening",
-        "Howdy",
-        "What's up",
-        "Greetings"
+        "Howdy"
       ],
       "responses": [
-        "Hey :-)",
-        "Hello, thanks for visiting",
-        "Hi there, what can I do for you?",
-        "Hi there, how can I help?"
+        "Hello! How can I assist you today?",
+        "Hi there! What can I do for you?",
+        "Hey! How can I help you?"
       ]
     },
     {
@@ -23,189 +24,231 @@
         "Goodbye",
         "Bye",
         "See you later",
+        "Farewell",
         "Catch you later",
         "I'm leaving",
         "Have a good day",
-        "Peace out"
+        "Talk to you later"
       ],
       "responses": [
-        "See you later, thanks for visiting",
-        "Have a nice day",
-        "Bye! Come back again soon."
+        "Goodbye! Have a great day!",
+        "Bye! Come back again soon.",
+        "See you later! Thanks for visiting."
       ]
     },
     {
       "tag": "order",
       "patterns": [
-        "I want to order food",
+        "I want to order",
         "I'd like to order",
-        "Can I get a",
-        "Let me get a",
-        "I'd like a",
-        "Can I have a",
-        "I would like to buy a",
-        "I'll have a",
-        "Give me a",
-        "Hi, I'd like a",
-        "Hello, can I order a",
-        "Hey, I want a",
-        "Get me a steak",
-        "I need a"
+        "Can I order",
+        "I would like to get",
+        "I need to order",
+        "I want to buy",
+        "I would like to have",
+        "Let me order",
+        "Order for me",
+        "Add to my order"
       ],
       "responses": [
-        "Sure, let's add that to your order.",
-        "Got it! I've added it to your cart.",
-        "Adding item to your order."
+        "Sure, what would you like to order?",
+        "Absolutely, please tell me what you'd like.",
+        "Great, what can I get for you?"
       ]
     },
     {
-      "tag": "remove_id",
+      "tag": "remove_item",
       "patterns": [
-        "Remove item",
-        "Delete order",
-        "Can you remove",
-        "Take off",
-        "Please remove",
-        "Delete from my order",
-        "Get rid of",
-        "I want to remove"
+        "I want to remove an item",
+        "Can I delete an item",
+        "Please remove something",
+        "I need to cancel an item",
+        "Take an item off my order",
+        "Remove an item from my order",
+        "Delete an item",
+        "I want to cancel something"
       ],
       "responses": [
-        "I've removed the item from your order.",
-        "Item has been removed from your cart.",
-        "Sure, I took the item off your order."
-      ]
-    },
-    {
-      "tag": "remove_desc",
-      "patterns": [
-        "Please remove all items with toppings",
-        "Remove all items with no cheese",
-        "Delete everything with lettuce",
-        "Can you take off all orders with extra sauce",
-        "Remove the burrito with steak",
-        "Delete the bowl with chicken",
-        "I want to remove the item with guacamole",
-        "Take away the order with black beans"
-      ],
-      "responses": [
-        "I've removed the items from your order.",
-        "Items have been removed from your cart.",
-        "Sure, I took the items off your order."
+        "Sure, which item would you like to remove?",
+        "Okay, please specify the item to remove.",
+        "No problem, tell me which item to remove."
       ]
     },
     {
       "tag": "modify_order",
       "patterns": [
-        "I want to change my order",
+        "I need to change my order",
         "Can I modify my order",
-        "I need to update my order",
+        "I want to update my order",
+        "I made a mistake in my order",
         "I want to edit my order",
-        "Change something in my order",
-        "I made a mistake in my order"
+        "Change something in my order"
       ],
       "responses": [
-        "Sure, what would you like to modify in your order?",
-        "Okay, tell me what changes you'd like to make to your order."
+        "Sure, what changes would you like to make?",
+        "Okay, please tell me what you'd like to modify.",
+        "No problem, what would you like to change?"
       ]
     },
     {
-      "tag": "restart",
+      "tag": "restart_order",
       "patterns": [
+        "I want to start over",
         "Reset my order",
-        "Start over",
-        "Restart order",
-        "Clear my cart",
-        "I want to start again",
-        "Delete my current order"
+        "Clear my order",
+        "Delete my order",
+        "Start a new order",
+        "Cancel everything"
       ],
       "responses": [
         "Your order has been reset. You can start a new order.",
         "I've cleared your order. Let's begin again."
       ]
-    },    
+    },
     {
       "tag": "thanks",
       "patterns": [
         "Thank you",
         "Thanks",
-        "Thanks a lot",
         "Much appreciated",
         "Thank you so much",
-        "Thanks for the help",
+        "Thanks for your help",
         "I appreciate it"
       ],
       "responses": [
+        "You're welcome!",
         "Happy to help!",
-        "Any time!",
-        "My pleasure"
+        "Any time!"
       ]
     },
     {
-      "tag": "menu",
+      "tag": "show_menu",
       "patterns": [
         "Show me the menu",
         "What do you have",
         "What are the options",
-        "What's on the menu",
-        "Let me see the food options",
-        "I'd like to see the menu"
+        "I'd like to see the menu",
+        "Display the menu",
+        "What can I order"
       ],
       "responses": [
-        "We sell burritos and bowls",
-        "We have burritos and bowls"
+        "Here is our menu: [list of items]",
+        "We offer a variety of items: [list of items]",
+        "Sure, here's what we have: [list of items]"
       ]
     },
     {
       "tag": "check_order",
       "patterns": [
-        "What is my current order",
-        "Can you show me my order",
-        "What have I ordered so far",
+        "What is in my order",
+        "Show me my order",
+        "What have I ordered",
         "Tell me my current order",
-        "Show my current cart",
-        "What's in my order"
+        "Display my order",
+        "What's in my cart"
       ],
       "responses": [
-        "Here is your current order:",
-        "These are the items in your order:"
+        "Here is your current order: [order details]",
+        "These are the items in your order: [order details]",
+        "Your order contains: [order details]"
       ]
     },
     {
-      "tag": "vegan",
+      "tag": "ask_options",
       "patterns": [
-        "What is the vegan option for meat",
-        "Do you have vegan options",
-        "Is there a vegetarian choice",
-        "Show me the vegan items",
-        "Any vegan substitutes",
-        "I prefer plant-based options"
+        "What options are there",
+        "What choices do I have",
+        "What are the available options",
+        "Tell me the choices",
+        "What kinds are available",
+        "What selections do I have"
       ],
       "responses": [
-        "We offer fajita veggies as a vegan option.",
-        "You can choose fajita veggies for a vegan meal."
+        "Here are the available options: [options]",
+        "You can choose from: [options]",
+        "The options are: [options]"
+      ]
+    },
+    {
+      "tag": "vegan_options",
+      "patterns": [
+        "Do you have vegan options",
+        "What are the vegetarian choices",
+        "Any vegan meals",
+        "Show me vegan options",
+        "I prefer plant-based options",
+        "Are there any vegan items"
+      ],
+      "responses": [
+        "Yes, we have vegan options like [vegan items].",
+        "We offer vegan choices such as [vegan items].",
+        "Our vegan options include [vegan items]."
       ]
     },
     {
       "tag": "checkout",
       "patterns": [
-        "Finished ordering",
-        "I'm done",
-        "Complete my order",
-        "That's all I want",
         "I'm ready to checkout",
+        "Complete my order",
         "Proceed to payment",
-        "Let's finish up",
-        "No, that should be it",
-        "Yes, that's all good",
-        "Yes, that's perfect",
-        "Yes, that's everything",
-        "No, that's all",
-        "That will be all, thanks"
+        "Finish my order",
+        "That's all",
+        "I'm done ordering"
       ],
       "responses": [
-        "Alright! I'll get your order ready.",
-        "Your order is complete."
+        "Alright, your order is complete.",
+        "Thank you! We are processing your order.",
+        "Your order has been placed."
+      ]
+    },
+    {
+      "tag": "confirm",
+      "patterns": [
+        "Yes",
+        "Yeah",
+        "Yep",
+        "Sure",
+        "Absolutely",
+        "Definitely",
+        "That's correct"
+      ],
+      "responses": [
+        "Great!",
+        "Understood.",
+        "Got it."
+      ]
+    },
+    {
+      "tag": "deny",
+      "patterns": [
+        "No",
+        "Nope",
+        "Not really",
+        "I don't think so",
+        "Negative",
+        "That's wrong",
+        "Incorrect"
+      ],
+      "responses": [
+        "Okay.",
+        "Understood.",
+        "No problem."
+      ]
+    },
+    {
+      "tag": "help",
+      "patterns": [
+        "I need help",
+        "Can you assist me",
+        "Help me please",
+        "I have a question",
+        "Can you help me",
+        "I need some assistance"
+      ],
+      "responses": [
+        "Sure, how can I assist you?",
+        "I'm here to help. What do you need?",
+        "How can I assist you today?"
       ]
     }
   ]
