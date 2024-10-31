@@ -359,7 +359,7 @@ def predict_intent(user_input):
     if DEBUG:
         print(f"[DEBUG] Max similarity: {max_similarity}, Predicted intent: {predicted_tag}")
 
-    threshold = 0.55  # Adjusted threshold
+    threshold = 0.45  # Adjusted threshold
     if max_similarity >= threshold:
         return predicted_tag
     else:
