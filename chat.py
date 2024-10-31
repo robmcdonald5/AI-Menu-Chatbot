@@ -359,7 +359,7 @@ def predict_intent(user_input):
     if DEBUG:
         print(f"[DEBUG] Max similarity: {max_similarity}, Predicted intent: {predicted_tag}")
 
-    threshold = 0.44
+    threshold = 0.55  # Adjusted threshold
     if max_similarity >= threshold:
         return predicted_tag
     else:
@@ -434,10 +434,10 @@ def checkout_order(session_id, session, sentence):
     session['last_activity'] = datetime.utcnow()
     return response
 
-def check_order(session_id, session):
+def check_order(session_id, session, sentence):
     return display_current_order(session_id)
 
-def restart_order(session_id, session):
+def restart_order(session_id, session, sentence):
     db.get_db().Orders.delete_many({"session_id": session_id})
     if DEBUG:
         print(f"[DEBUG] Orders for session {session_id} have been reset by user request.")
@@ -448,11 +448,11 @@ def restart_order(session_id, session):
     session['last_activity'] = datetime.utcnow()
     return "Your order has been reset. You can start a new order."
 
-def check_menu(session_id, session):
+def check_menu(session_id, session, sentence):
     menu_items = ', '.join(menu.keys())
     return f"Our main items are: {menu_items}"
 
-def provide_options(session_id, session):
+def provide_options(session_id, session, sentence):
     is_fixing = session.get("is_fixing", False)
     missing_field_context = session.get("missing_field_context", {})
     if is_fixing:
@@ -479,12 +479,15 @@ intent_handlers = {
     "order": process_order,
     "remove_id": remove_order_by_id,
     "remove_desc": remove_order_by_description,
+    "remove_item": remove_order_by_description,  # Updated to handle 'remove_item' intent
     "modify_order": modify_order,
     "checkout": checkout_order,
     # Interruption intents
     "check_order": check_order,
     "restart": restart_order,
+    "restart_order": restart_order,  # Added to handle 'restart_order' intent
     "menu": check_menu,
+    "show_menu": check_menu,  # Added to handle 'show_menu' intent
     "ask_options": provide_options,
 }
 
@@ -593,7 +596,7 @@ def chat():
         missing_field_context = session.get("missing_field_context", {})
 
         # If we were in the middle of fixing, and the intent was an interruption, prompt again
-        interruption_intents = ["check_order", "restart", "menu", "ask_options"]
+        interruption_intents = ["check_order", "restart", "menu", "ask_options", "show_menu", "restart_order"]
         if is_fixing and predicted_tag in interruption_intents:
             field = missing_field_context.get("field")
             if field and field in field_prompts:
