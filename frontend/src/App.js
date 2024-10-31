@@ -1,15 +1,13 @@
 //import logo from "./logo.svg";
 import "./App.css";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 
 function App() {
   const [messages, setMessages] = useState([]);
   const [userInput, setUserInput] = useState("");
-
   const [showPopup, setShowPopup] = useState(true);
   const [slideOff, setSlideOff] = useState(false);
-
   const [sessionId, setSessionId] = useState(null);
 
   // Initialize sessionId from localStorage when the component mounts
@@ -71,6 +69,12 @@ function App() {
     setUserInput("");
   };
 
+  // Scroll to the latest message
+  const messagesEndRef = useRef(null);
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
   return (
     <div className="h-screen relative">
       {/* Navbar */}
@@ -105,23 +109,9 @@ function App() {
         {/* Chat Messages */}
         <div className="flex-1 overflow-auto mb-4">
           {messages.map((msg, idx) => (
-            <div
-              key={idx}
-              className={`flex mb-2 ${
-                msg.sender === "user" ? "justify-end" : "justify-start"
-              }`}
-            >
-              <div
-                className={`p-3 rounded-xl max-w-xs text-lg ${
-                  msg.sender === "user"
-                    ? "bg-slate-200 text-slate-900 shadow-lg"
-                    : "bg-[#441500] text-white shadow-lg"
-                }`}
-              >
-                {msg.text}
-              </div>
-            </div>
+            <Message key={idx} message={msg} />
           ))}
+          <div ref={messagesEndRef} />
         </div>
 
         {/* Input field */}
@@ -160,6 +150,37 @@ function App() {
             </svg>
           </button>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function Message({ message }) {
+  const { text, sender } = message;
+  const [displayedText, setDisplayedText] = useState(sender === "chipotle" ? "" : text);
+
+  useEffect(() => {
+    if (sender === "chipotle") {
+      let index = 0;
+      const interval = setInterval(() => {
+        setDisplayedText(text.slice(0, index + 1));
+        index++;
+        if (index >= text.length) {
+          clearInterval(interval);
+        }
+      }, 50); // Typing speed for chipotle response
+      return () => clearInterval(interval);
+    }
+  }, [text, sender]);
+
+  return (
+    <div className={`flex mb-2 ${sender === "user" ? "justify-end" : "justify-start"}`}>
+      <div
+        className={`p-3 rounded-xl max-w-xs text-lg ${
+          sender === "user" ? "bg-slate-200 text-slate-900 shadow-lg" : "bg-[#441500] text-white shadow-lg"
+        }`}
+      >
+        {displayedText}
       </div>
     </div>
   );
