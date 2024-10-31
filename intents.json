@@ -48,12 +48,26 @@
         "I would like to have",
         "Let me order",
         "Order for me",
-        "Add to my order"
+        "Add to my order",
+        "I would like a",
+        "I'd like a",
+        "Can I get a",
+        "Get me a",
+        "Give me a",
+        "I'll have a",
+        "I want a",
+        "I need a",
+        "Hi, I'd like a",
+        "Hello, can I order a",
+        "Hey, I want a",
+        "Can I have a",
+        "I would like to order a",
+        "Please get me a"
       ],
       "responses": [
-        "Sure, what would you like to order?",
-        "Absolutely, please tell me what you'd like.",
-        "Great, what can I get for you?"
+        "Sure, I've added that to your order.",
+        "Got it! I've added it to your cart.",
+        "Adding item to your order."
       ]
     },
     {
@@ -66,7 +80,12 @@
         "Take an item off my order",
         "Remove an item from my order",
         "Delete an item",
-        "I want to cancel something"
+        "I want to cancel something",
+        "I want to remove",
+        "Can you remove",
+        "Delete from my order",
+        "Get rid of",
+        "Please delete"
       ],
       "responses": [
         "Sure, which item would you like to remove?",
@@ -82,7 +101,9 @@
         "I want to update my order",
         "I made a mistake in my order",
         "I want to edit my order",
-        "Change something in my order"
+        "Change something in my order",
+        "I want to adjust my order",
+        "Can I alter my order"
       ],
       "responses": [
         "Sure, what changes would you like to make?",
@@ -98,7 +119,9 @@
         "Clear my order",
         "Delete my order",
         "Start a new order",
-        "Cancel everything"
+        "Cancel everything",
+        "Restart my order",
+        "Begin again"
       ],
       "responses": [
         "Your order has been reset. You can start a new order.",
@@ -113,7 +136,8 @@
         "Much appreciated",
         "Thank you so much",
         "Thanks for your help",
-        "I appreciate it"
+        "I appreciate it",
+        "Thanks a lot"
       ],
       "responses": [
         "You're welcome!",
@@ -129,7 +153,9 @@
         "What are the options",
         "I'd like to see the menu",
         "Display the menu",
-        "What can I order"
+        "What can I order",
+        "Tell me the menu",
+        "What is on the menu"
       ],
       "responses": [
         "Here is our menu: [list of items]",
@@ -145,7 +171,9 @@
         "What have I ordered",
         "Tell me my current order",
         "Display my order",
-        "What's in my cart"
+        "What's in my cart",
+        "Review my order",
+        "Can I see my order"
       ],
       "responses": [
         "Here is your current order: [order details]",
@@ -161,7 +189,9 @@
         "What are the available options",
         "Tell me the choices",
         "What kinds are available",
-        "What selections do I have"
+        "What selections do I have",
+        "What are the options",
+        "What can I choose from"
       ],
       "responses": [
         "Here are the available options: [options]",
@@ -177,12 +207,14 @@
         "Any vegan meals",
         "Show me vegan options",
         "I prefer plant-based options",
-        "Are there any vegan items"
+        "Are there any vegan items",
+        "What vegan items do you have",
+        "Tell me about your vegan options"
       ],
       "responses": [
-        "Yes, we have vegan options like [vegan items].",
-        "We offer vegan choices such as [vegan items].",
-        "Our vegan options include [vegan items]."
+        "Yes, we have vegan options like fajita veggies and salads.",
+        "We offer vegan choices such as veggie bowls and salads.",
+        "Our vegan options include fajita veggies, black beans, and guacamole."
       ]
     },
     {
@@ -193,7 +225,9 @@
         "Proceed to payment",
         "Finish my order",
         "That's all",
-        "I'm done ordering"
+        "I'm done ordering",
+        "I'm finished",
+        "Finalize my order"
       ],
       "responses": [
         "Alright, your order is complete.",
@@ -210,7 +244,9 @@
         "Sure",
         "Absolutely",
         "Definitely",
-        "That's correct"
+        "That's correct",
+        "Right",
+        "Exactly"
       ],
       "responses": [
         "Great!",
@@ -220,14 +256,16 @@
     },
     {
       "tag": "deny",
-      "patterns": [
+      "patterns":
+      [
         "No",
         "Nope",
         "Not really",
         "I don't think so",
         "Negative",
         "That's wrong",
-        "Incorrect"
+        "Incorrect",
+        "No thanks"
       ],
       "responses": [
         "Okay.",
@@ -243,7 +281,8 @@
         "Help me please",
         "I have a question",
         "Can you help me",
-        "I need some assistance"
+        "I need some assistance",
+        "I'm confused"
       ],
       "responses": [
         "Sure, how can I assist you?",
