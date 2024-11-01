@@ -654,7 +654,7 @@ def serve_static(path):
     else:
         return send_from_directory(app.static_folder, 'index.html')
 
-# Uncomment the following lines if you want to run the Flask app locally
-# if __name__ == '__main__':
-#     port = int(os.environ.get("PORT", 5000))
-#     app.run(host='0.0.0.0', port=port)
+##Uncomment the following lines if you want to run the Flask app locally
+#if __name__ == '__main__':
+#    port = int(os.environ.get("PORT", 5000))
+#    app.run(host='0.0.0.0', port=port, debug=True)
