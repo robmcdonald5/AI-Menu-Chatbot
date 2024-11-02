@@ -18,7 +18,7 @@ from datetime import datetime, timedelta
 from connect import database as db  # Ensure connect.py is correctly set up with get_db()
 
 app = Flask(__name__, static_folder='frontend/build')  # Set static_folder to frontend/build
-CORS(app, resources={r"/*": {"origins": ["https://chipotleaimenu.app"]}}, supports_credentials=True)
+# CORS(app, resources={r"/*": {"origins": ["https://chipotleaimenu.app"]}}, supports_credentials=True)
 
 # Load SpaCy model and Sentence-BERT model
 nlp = spacy.load('en_core_web_sm')
@@ -654,7 +654,7 @@ def serve_static(path):
     else:
         return send_from_directory(app.static_folder, 'index.html')
 
-##Uncomment the following lines if you want to run the Flask app locally
-#if __name__ == '__main__':
-#    port = int(os.environ.get("PORT", 5000))
-#    app.run(host='0.0.0.0', port=port, debug=True)
+# Uncomment the following lines if you want to run the Flask app locally
+if __name__ == '__main__':
+   port = int(os.environ.get("PORT", 5000))
+   app.run(host='0.0.0.0', port=port, debug=True)
