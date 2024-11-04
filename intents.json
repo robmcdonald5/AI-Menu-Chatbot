@@ -202,14 +202,13 @@
     {
       "tag": "vegan_options",
       "patterns": [
-        "Do you have vegan options",
-        "What are the vegetarian choices",
-        "Any vegan meals",
-        "Show me vegan options",
-        "I prefer plant-based options",
-        "Are there any vegan items",
-        "What vegan items do you have",
-        "Tell me about your vegan options"
+        "vegan options",
+        "vegetarian choices",
+        "vegan meals",
+        "plant-based options",
+        "vegan items",
+        "vegan items do you have",
+        "your vegan options"
       ],
       "responses": [
         "Yes, we have vegan options like fajita veggies and salads.",

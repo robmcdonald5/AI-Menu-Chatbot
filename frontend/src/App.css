@@ -36,3 +36,14 @@
     transform: rotate(360deg);
   }
 }
+
+.collapsible {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease-out;
+}
+
+.collapsible.open {
+  max-height: 400px; /* Adjust this value based on your content */
+  overflow-y:auto;
+}

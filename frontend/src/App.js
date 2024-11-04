@@ -1,7 +1,65 @@
 //import logo from "./logo.svg";
 import "./App.css";
 import React, { useState, useEffect, useRef } from "react";
+import bowl from "./bowl.svg";
 import axios from "axios";
+
+const OrderDetails = ({ orderDetails }) => {
+  if (!Array.isArray(orderDetails)) {
+    return <div>Order is currently empty!</div>;
+  }
+
+  return (
+    <div className="">
+      {orderDetails.map((order) => (
+        <div key={order._id} className="bg-white rounded-md p-3 ">
+          <div className="flex flex-wrap border-b-2 pb-2">
+            <div className="relative pr-3">
+              <img
+                src={bowl}
+                alt="Bowl"
+                width="100"
+                height="100"
+                className="rounded-xl pt-1 pl-1"
+              />
+              <h3 className="absolute top-0 left-0 bg-[#441500] text-white py-1 px-2 rounded-full">
+                {order.order_id}
+              </h3>
+            </div>
+            <div className="pr-3">
+              <dix className="flex flex-wrap">
+                <p className="font-bold pr-2">Price:</p>
+                <p> {order.price}</p>
+              </dix>
+              <dix className="flex flex-wrap">
+                <p className="font-bold pr-2">Meat:</p>
+                <p> {order.meats}</p>
+              </dix>
+              <dix className="flex flex-wrap">
+                <p className="font-bold pr-2">Breans:</p>
+                <p> {order.beans}</p>
+              </dix>
+              <dix className="flex flex-wrap">
+                <p className="font-bold pr-2">Rice:</p>
+                <p> {order.rice}</p>
+              </dix>
+            </div>
+            <div>
+              <dix className="flex flex-wrap">
+                <p className="font-bold pr-2">Toppings:</p>
+                <p> {order.toppings}</p>
+              </dix>
+              <dix className="flex flex-wrap">
+                <p className="font-bold pr-2">Completed:</p>
+                <p> {order.completed ? "Yes" : "No"}</p>
+              </dix>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 function App() {
   const [messages, setMessages] = useState([]);
@@ -9,6 +67,8 @@ function App() {
   const [showPopup, setShowPopup] = useState(true);
   const [slideOff, setSlideOff] = useState(false);
   const [sessionId, setSessionId] = useState(null);
+  const [orderDetails, setOrderDetails] = useState("");
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   // Initialize sessionId from localStorage when the component mounts
   useEffect(() => {
@@ -17,6 +77,21 @@ function App() {
       setSessionId(storedSessionId);
     }
   }, []);
+
+  const fetchOrderDetails = async () => {
+    try {
+      const response = await axios.get("http://localhost:5000/get_order", {
+        params: { session_id: sessionId },
+      });
+      setOrderDetails(response.data.order_details);
+    } catch (error) {
+      console.error("Error fetching order details:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchOrderDetails();
+  }, [sessionId]);
 
   const handleContinue = () => {
     setSlideOff(true); // Start the slide animation
@@ -47,7 +122,11 @@ function App() {
           ? "https://chipotleaimenu.app"
           : "http://localhost:5000";
 
-      const response = await axios.post(`${baseURL}/chat`, dataToSend);
+      const response = await axios.post(`${baseURL}/chat`, dataToSend, {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
 
       const gptMessage = { text: response.data.response, sender: "chipotle" };
       setMessages((prev) => [...prev, gptMessage]);
@@ -57,6 +136,7 @@ function App() {
         setSessionId(response.data.session_id);
         localStorage.setItem("session_id", response.data.session_id);
       }
+      await fetchOrderDetails();
     } catch (error) {
       console.error("Error sending message:", error);
       const errorMessage = {
@@ -67,6 +147,10 @@ function App() {
     }
 
     setUserInput("");
+  };
+
+  const toggleDropdown = () => {
+    setIsDropdownOpen(!isDropdownOpen);
   };
 
   // Scroll to the latest message
@@ -115,6 +199,24 @@ function App() {
         </div>
 
         {/* Input field */}
+
+        <button
+          onClick={toggleDropdown}
+          className="mb-2 p-2 bg-[#AC2318] text-white rounded-full shadow-lg"
+        >
+          {isDropdownOpen ? "Hide Current Order" : "Show Current Order"}
+        </button>
+
+        {/* Collapsible dropdown */}
+        <div
+          className={`collapsible ${
+            isDropdownOpen ? "open mb-4 p-2 border border-stone-400 " : ""
+          } rounded-2xl shadow-lg px-2`}
+        >
+          <div>
+            <OrderDetails orderDetails={orderDetails} />
+          </div>
+        </div>
         <form onSubmit={handleSubmit} className="flex">
           <input
             type="text"
@@ -157,7 +259,9 @@ function App() {
 
 function Message({ message }) {
   const { text, sender } = message;
-  const [displayedText, setDisplayedText] = useState(sender === "chipotle" ? "" : text);
+  const [displayedText, setDisplayedText] = useState(
+    sender === "chipotle" ? "" : text
+  );
 
   useEffect(() => {
     if (sender === "chipotle") {
@@ -174,10 +278,16 @@ function Message({ message }) {
   }, [text, sender]);
 
   return (
-    <div className={`flex mb-2 ${sender === "user" ? "justify-end" : "justify-start"}`}>
+    <div
+      className={`flex mb-2 ${
+        sender === "user" ? "justify-end" : "justify-start"
+      }`}
+    >
       <div
         className={`p-3 rounded-xl max-w-xs text-lg ${
-          sender === "user" ? "bg-slate-200 text-slate-900 shadow-lg" : "bg-[#441500] text-white shadow-lg"
+          sender === "user"
+            ? "bg-slate-200 text-slate-900 shadow-lg"
+            : "bg-[#441500] text-white shadow-lg"
         }`}
       >
         {displayedText}

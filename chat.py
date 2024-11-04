@@ -11,6 +11,7 @@ from sklearn.cluster import KMeans
 from spacy.matcher import PhraseMatcher
 from sentence_transformers import SentenceTransformer
 from collections import Counter
+
 import os
 from datetime import datetime, timedelta
 
@@ -18,7 +19,8 @@ from datetime import datetime, timedelta
 from connect import database as db  # Ensure connect.py is correctly set up with get_db()
 
 app = Flask(__name__, static_folder='frontend/build')  # Set static_folder to frontend/build
-CORS(app, resources={r"/*": {"origins": ["https://chipotleaimenu.app"]}}, supports_credentials=True)
+CORS(app, resources={r"/*": {"origins": ["http://localhost:5001"]}}, supports_credentials=True)
+#CORS(app, resources={r"/*": {"origins": ["https://chipotleaimenu.app"]}}, supports_credentials=True)
 
 # Load SpaCy model and Sentence-BERT model
 nlp = spacy.load('en_core_web_sm')
@@ -359,7 +361,7 @@ def predict_intent(user_input):
     if DEBUG:
         print(f"[DEBUG] Max similarity: {max_similarity}, Predicted intent: {predicted_tag}")
 
-    threshold = 0.45  # Adjusted threshold
+    threshold = 0.20  # Adjusted threshold
     if max_similarity >= threshold:
         return predicted_tag
     else:
@@ -486,16 +488,42 @@ intent_handlers = {
     "check_order": check_order,
     "restart": restart_order,
     "restart_order": restart_order,  # Added to handle 'restart_order' intent
-    "menu": check_menu,
-    "show_menu": check_menu,  # Added to handle 'show_menu' intent
+    "menu": process_order,
+    "show_menu": process_order,  # Added to handle 'show_menu' intent
     "ask_options": provide_options,
 }
 
 # Define the inactivity timeout
 INACTIVITY_TIMEOUT = timedelta(minutes=5)
+@app.route('/get_order', methods=['GET'])
+def get_order():
+    session_id = request.args.get('session_id')
+    if not session_id:
+        return jsonify({"error": "Missing session_id"}), 400
+    
+
+
+    order_details = list(db.get_db().Orders.find({"session_id": session_id}))
+
+    for order in order_details:
+        order['_id'] = str(order['_id'])
+    print(order_details)
+    return jsonify({"order_details": order_details})
 
 @app.route('/chat', methods=['POST', 'OPTIONS'])
 def chat():
+    if request.method == 'OPTIONS':
+        return _build_cors_preflight_response()
+    
+    if request.method == "OPTIONS":
+        # Explicitly handle OPTIONS to respond with appropriate CORS headers
+        response = jsonify({"status": "preflight OK"})
+        response.headers.add("Access-Control-Allow-Origin", "http://localhost:5001")
+        response.headers.add("Access-Control-Allow-Credentials", "true")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
+        response.headers.add("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+        return response, 200
+    
     try:
         data = request.json
         if not data or 'message' not in data:
@@ -641,6 +669,18 @@ def chat():
 
     return jsonify({"response": "\n".join(responses), "session_id": session_id})
 
+def _build_cors_preflight_response():
+    response = jsonify({'status': 'OK'})
+    response.headers.add("Access-Control-Allow-Origin", "http://localhost:5001")
+    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
+
+def _corsify_actual_response(response):
+    response.headers.add("Access-Control-Allow-Origin", "http://localhost:5001")
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
 # Serve React frontend
 @app.route('/')
 def home():
@@ -655,6 +695,6 @@ def serve_static(path):
         return send_from_directory(app.static_folder, 'index.html')
 
 ##Uncomment the following lines if you want to run the Flask app locally
-#if __name__ == '__main__':
-#    port = int(os.environ.get("PORT", 5000))
-#    app.run(host='0.0.0.0', port=port, debug=True)
+if __name__ == '__main__':
+   port = int(os.environ.get("PORT", 5000))
+   app.run(host='0.0.0.0', port=port, debug=True)
