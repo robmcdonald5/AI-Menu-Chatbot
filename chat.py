@@ -534,7 +534,6 @@ def handle_deny(session_id, session, sentence):
 
 # Mapping of intent tags to handler functions
 intent_handlers = {
-    "greeting": lambda sid, s, sen: random.choice(intents['intents'][0]['responses']),
     "goodbye": lambda sid, s, sen: random.choice(intents['intents'][1]['responses']),
     "order": process_order,
     "remove_item": remove_order_by_description,
@@ -546,9 +545,7 @@ intent_handlers = {
     "ask_options": provide_options,
     "confirm": handle_confirm,
     "deny": handle_deny,
-    "help": lambda sid, s, sen: random.choice(intents['intents'][16]['responses']),
     "vegan_options": lambda sid, s, sen: random.choice(intents['intents'][14]['responses']),
-    "thanks": lambda sid, s, sen: random.choice(intents['intents'][6]['responses']),
     "fallback": lambda sid, s, sen: random.choice(intents['intents'][-1]['responses'])
 }
 
