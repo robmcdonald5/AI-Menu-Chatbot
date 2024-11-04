@@ -1,24 +1,6 @@
 {
   "intents": [
     {
-      "tag": "greeting",
-      "patterns": [
-        "Hello",
-        "Hi",
-        "Hey",
-        "Greetings",
-        "Good morning",
-        "Good afternoon",
-        "Good evening",
-        "Howdy"
-      ],
-      "responses": [
-        "Hello! How can I assist you today?",
-        "Hi there! What can I do for you?",
-        "Hey! How can I help you?"
-      ]
-    },
-    {
       "tag": "goodbye",
       "patterns": [
         "Goodbye",
@@ -62,7 +44,17 @@
         "Hey, I want a",
         "Can I have a",
         "I would like to order a",
-        "Please get me a"
+        "Please get me a",
+        "I want a bowl with",
+        "Can I get a bowl with",
+        "I'd like a burrito with",
+        "Order me a salad with",
+        "I'd like a taco containing",
+        "Get me a bowl containing",
+        "I'd like 2 bowls with",
+        "I would like 2 bowls with",
+        "I want 2 bowls with",
+        "I'd like two bowls with"
       ],
       "responses": [
         "Sure, I've added that to your order.",
@@ -121,28 +113,15 @@
         "Start a new order",
         "Cancel everything",
         "Restart my order",
-        "Begin again"
+        "Begin again",
+        "Let's start over",
+        "I want to restart",
+        "Restarting my order",
+        "Can I reset my order"
       ],
       "responses": [
         "Your order has been reset. You can start a new order.",
         "I've cleared your order. Let's begin again."
-      ]
-    },
-    {
-      "tag": "thanks",
-      "patterns": [
-        "Thank you",
-        "Thanks",
-        "Much appreciated",
-        "Thank you so much",
-        "Thanks for your help",
-        "I appreciate it",
-        "Thanks a lot"
-      ],
-      "responses": [
-        "You're welcome!",
-        "Happy to help!",
-        "Any time!"
       ]
     },
     {
@@ -155,7 +134,12 @@
         "Display the menu",
         "What can I order",
         "Tell me the menu",
-        "What is on the menu"
+        "What is on the menu",
+        "Please show me the menu",
+        "Can you show me the menu",
+        "Show the menu",
+        "I'd like to see what you have",
+        "Can I see the menu"
       ],
       "responses": [
         "Here is our menu: [list of items]",
@@ -173,7 +157,12 @@
         "Display my order",
         "What's in my cart",
         "Review my order",
-        "Can I see my order"
+        "Can I see my order",
+        "Check my order",
+        "Let me see my order",
+        "I want to check my order",
+        "Show my current order",
+        "Can you show me my order"
       ],
       "responses": [
         "Here is your current order: [order details]",
@@ -191,7 +180,12 @@
         "What kinds are available",
         "What selections do I have",
         "What are the options",
-        "What can I choose from"
+        "What can I choose from",
+        "What options do you have",
+        "Show me the options",
+        "What can I pick",
+        "What do I have to choose from",
+        "Options please"
       ],
       "responses": [
         "Here are the available options: [options]",
@@ -202,14 +196,17 @@
     {
       "tag": "vegan_options",
       "patterns": [
-        "Do you have vegan options",
-        "What are the vegetarian choices",
-        "Any vegan meals",
-        "Show me vegan options",
-        "I prefer plant-based options",
-        "Are there any vegan items",
-        "What vegan items do you have",
-        "Tell me about your vegan options"
+        "vegan options",
+        "vegetarian choices",
+        "vegan meals",
+        "plant-based options",
+        "vegan items",
+        "vegan items do you have",
+        "your vegan options",
+        "what vegan options do you have",
+        "vegan options please",
+        "are there any vegan options",
+        "can you provide vegan options"
       ],
       "responses": [
         "Yes, we have vegan options like fajita veggies and salads.",
@@ -227,7 +224,13 @@
         "That's all",
         "I'm done ordering",
         "I'm finished",
-        "Finalize my order"
+        "Finalize my order",
+        "Checkout please",
+        "I want to checkout",
+        "Can I checkout",
+        "I need to checkout",
+        "Let's checkout",
+        "I'd like to checkout"
       ],
       "responses": [
         "Alright, your order is complete.",
@@ -246,7 +249,12 @@
         "Definitely",
         "That's correct",
         "Right",
-        "Exactly"
+        "Exactly",
+        "Yes please",
+        "Yes, please",
+        "Yes, that's correct",
+        "Yes, exactly",
+        "Yes, absolutely"
       ],
       "responses": [
         "Great!",
@@ -256,8 +264,7 @@
     },
     {
       "tag": "deny",
-      "patterns":
-      [
+      "patterns": [
         "No",
         "Nope",
         "Not really",
@@ -265,7 +272,11 @@
         "Negative",
         "That's wrong",
         "Incorrect",
-        "No thanks"
+        "No thanks",
+        "No, thanks",
+        "No, that's not right",
+        "No, I don't think so",
+        "No, that's incorrect"
       ],
       "responses": [
         "Okay.",
@@ -274,20 +285,12 @@
       ]
     },
     {
-      "tag": "help",
-      "patterns": [
-        "I need help",
-        "Can you assist me",
-        "Help me please",
-        "I have a question",
-        "Can you help me",
-        "I need some assistance",
-        "I'm confused"
-      ],
+      "tag": "fallback",
+      "patterns": [],
       "responses": [
-        "Sure, how can I assist you?",
-        "I'm here to help. What do you need?",
-        "How can I assist you today?"
+        "I'm sorry, I didn't understand that. Could you please rephrase or specify your request?",
+        "Can you please provide more details?",
+        "I didn't catch that. Could you clarify your request?"
       ]
     }
   ]

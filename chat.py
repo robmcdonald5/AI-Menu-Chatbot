@@ -12,27 +12,38 @@ from spacy.matcher import PhraseMatcher
 from sentence_transformers import SentenceTransformer
 from collections import Counter
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from sklearn.preprocessing import MinMaxScaler
 
 # Import the database connection
 from connect import database as db  # Ensure connect.py is correctly set up with get_db()
 
 app = Flask(__name__, static_folder='frontend/build')  # Set static_folder to frontend/build
-CORS(app, resources={r"/*": {"origins": ["https://chipotleaimenu.app"]}}, supports_credentials=True)
+CORS(app, resources={r"/*": {"origins": ["http://localhost:3000"]}}, supports_credentials=True)
 
 # Load SpaCy model and Sentence-BERT model
 nlp = spacy.load('en_core_web_sm')
-sentence_model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
+sentence_model = SentenceTransformer('all-mpnet-base-v2')
 
 # Toggleable debug mode
 DEBUG = True  # Set to True to enable debug output
 
-# For visual clarity keep this function high in the stack
+# Define similarity thresholds
+SIMILARITY_THRESHOLD_HIGH = 0.7  # High confidence
+SIMILARITY_THRESHOLD_MEDIUM = 0.45  # Medium confidence
+
+# Define weights for similarity metrics
+WEIGHT_COSINE = 0.5
+WEIGHT_EUCLIDEAN = 0.3
+WEIGHT_JACCARD = 0.2
+
+# Function to clean sentences
 def clean_sentence(sentence):
     sentence = sentence.lower()
     sentence = re.sub(r'[^\w\s]', '', sentence)
     return sentence
 
+# Load intents from intents.json
 with open('intents.json', 'r') as f:
     intents = json.load(f)
 
@@ -40,7 +51,6 @@ with open('intents.json', 'r') as f:
 all_patterns = []
 pattern_tags = []
 
-# Pattern intent recognition main loop
 for intent in intents['intents']:
     tag = intent['tag']
     patterns = intent['patterns']
@@ -96,18 +106,6 @@ def fetch_menu_data():
         print(f"[DEBUG] Beans list: {beans}")
         print(f"[DEBUG] Toppings list: {toppings}")
 
-        # Fetch all items and collect categories
-        all_items = list(menu_item_collection.find({}))
-        categories_set = set()
-        for item in all_items:
-            if 'category' in item:
-                categories = item['category']
-                if isinstance(categories, list):
-                    categories_set.update([cat.lower() for cat in categories])
-                else:
-                    categories_set.add(item['category'].lower())
-        print(f"[DEBUG] All categories in database: {categories_set}")
-
     return menu, meats, rice, beans, toppings
 
 menu, meats, rice, beans, toppings = fetch_menu_data()
@@ -125,7 +123,7 @@ field_prompts = {
 bot_name = "Chipotle"
 print("Hi I am an automated Chipotle AI menu, what would you like to order! (type 'quit' to exit)")
 
-# Pushes Orders forward to check or null for next value
+# Function to get next order_id
 def get_next_order_id(session_id):
     last_order = db.get_db().Orders.find_one({"session_id": session_id}, sort=[("order_id", -1)])
     if last_order and "order_id" in last_order:
@@ -133,6 +131,7 @@ def get_next_order_id(session_id):
     else:
         return 1
 
+# Function to convert text numbers to integers
 def text2int(textnum):
     num_words = {
         "one": 1, "two":2, "three":3, "four":4, "five":5,
@@ -140,8 +139,8 @@ def text2int(textnum):
     }
     return num_words.get(textnum.lower(), 1)
 
+# Function to extract field values using PhraseMatcher
 def extract_field_value(field, user_input):
-    # Create a PhraseMatcher
     matcher = PhraseMatcher(nlp.vocab, attr="LOWER")
     # Add field-specific patterns
     if field == "meats":
@@ -176,6 +175,7 @@ def extract_field_value(field, user_input):
             print("[DEBUG] No matches found.")
         return None
 
+# Function to process order using SpaCy
 def process_order_spacy(session_id, input_sentence):
     doc = nlp(input_sentence)
     items = []
@@ -235,6 +235,7 @@ def process_order_spacy(session_id, input_sentence):
     else:
         return "Sorry, I didn't understand the items you want to order."
 
+# Function to update order
 def update_order(session_id, order_id, field, value):
     if DEBUG:
         order_before = db.get_db().Orders.find_one({"session_id": session_id, "order_id": order_id})
@@ -257,6 +258,7 @@ def update_order(session_id, order_id, field, value):
         )
     return f"Updated order {order_id} with {field}: {', '.join(value)}"
 
+# Function to display current order
 def display_current_order(session_id):
     orders = list(db.get_db().Orders.find({"session_id": session_id}))
     if orders:
@@ -271,6 +273,7 @@ def display_current_order(session_id):
     else:
         return "Your order is currently empty."
 
+# Function to extract order IDs
 def extract_order_ids(input_sentence):
     doc = nlp(input_sentence)
     order_ids = []
@@ -282,6 +285,7 @@ def extract_order_ids(input_sentence):
                 order_ids.append(text2int(ent.text))
     return order_ids
 
+# Function to remove items by IDs
 def remove_items_by_ids(session_id, order_ids):
     removed_items = []
     for oid in order_ids:
@@ -291,6 +295,7 @@ def remove_items_by_ids(session_id, order_ids):
             db.get_db().Orders.delete_one({"session_id": session_id, "order_id": oid})
     return removed_items
 
+# Function to extract features
 def extract_features(input_sentence):
     doc = nlp(input_sentence)
     features = {
@@ -323,6 +328,7 @@ def extract_features(input_sentence):
 
     return features
 
+# Function to remove items by features
 def remove_items_by_features(session_id, features):
     removed_items = []
     query = {"session_id": session_id}
@@ -346,25 +352,60 @@ def remove_items_by_features(session_id, features):
 
     return removed_items
 
+# Function to predict intent
 def predict_intent(user_input):
     cleaned_input = clean_sentence(user_input)
     input_embedding = sentence_model.encode([cleaned_input])[0]
 
-    # Compute cosine similarities with all pattern embeddings
-    similarities = np.dot(pattern_embeddings, input_embedding) / (np.linalg.norm(pattern_embeddings, axis=1) * np.linalg.norm(input_embedding))
-    max_similarity_index = np.argmax(similarities)
-    max_similarity = similarities[max_similarity_index]
-    predicted_tag = pattern_tags[max_similarity_index]
+    # Compute Cosine Similarity
+    cosine_similarities = np.dot(pattern_embeddings, input_embedding) / (np.linalg.norm(pattern_embeddings, axis=1) * np.linalg.norm(input_embedding))
+    
+    # Compute Euclidean Distance
+    euclidean_distances = np.linalg.norm(pattern_embeddings - input_embedding, axis=1)
+    
+    # Compute Jaccard Similarity
+    input_tokens = set(cleaned_input.split())
+    jaccard_similarities = np.array([
+        len(input_tokens.intersection(set(pattern.split()))) / len(input_tokens.union(set(pattern.split()))) 
+        if len(input_tokens.union(set(pattern.split()))) > 0 else 0 
+        for pattern in all_patterns
+    ])
+    
+    # Normalize Euclidean Distances and Jaccard Similarities
+    scaler_euclidean = MinMaxScaler()
+    normalized_euclidean = scaler_euclidean.fit_transform(euclidean_distances.reshape(-1, 1)).flatten()
+    normalized_jaccard = jaccard_similarities  # Already in [0,1]
+
+    # Combine similarities with weights
+    combined_scores = (WEIGHT_COSINE * cosine_similarities) + \
+                      (WEIGHT_EUCLIDEAN * (1 - normalized_euclidean)) + \
+                      (WEIGHT_JACCARD * normalized_jaccard)
+
+    # Find the best match
+    max_score_index = np.argmax(combined_scores)
+    max_score = combined_scores[max_score_index]
+    predicted_tag = pattern_tags[max_score_index]
 
     if DEBUG:
-        print(f"[DEBUG] Max similarity: {max_similarity}, Predicted intent: {predicted_tag}")
+        #print(f"[DEBUG] Cosine Similarities: {cosine_similarities}")
+        #print(f"[DEBUG] Euclidean Distances: {euclidean_distances}")
+        #print(f"[DEBUG] Normalized Euclidean: {normalized_euclidean}")
+        #print(f"[DEBUG] Jaccard Similarities: {jaccard_similarities}")
+        #print(f"[DEBUG] Combined Scores: {combined_scores}")
+        print(f"[DEBUG] Max combined score: {max_score}, Predicted intent: {predicted_tag}")
 
-    threshold = 0.45  # Adjusted threshold
-    if max_similarity >= threshold:
-        return predicted_tag
+    # Determine intent based on combined score thresholds
+    if max_score >= SIMILARITY_THRESHOLD_HIGH:
+        confidence = "high"
+        return predicted_tag, confidence
+    elif SIMILARITY_THRESHOLD_MEDIUM <= max_score < SIMILARITY_THRESHOLD_HIGH:
+        confidence = "medium"
+        return predicted_tag, confidence
     else:
-        return None
+        confidence = "low"
+        return None, confidence
 
+# Function to check missing fields and set slot-filling context
 def check_missing_fields(session):
     session_id = session['session_id']
     # Only consider orders for this session that are not completed
@@ -372,14 +413,25 @@ def check_missing_fields(session):
     if DEBUG:
         print(f"[DEBUG] Orders with missing fields: {orders}")
     for order in orders:
-        for field in ["meats", "rice", "beans", "toppings"]:
-            if not order.get(field):  # Checks if the list is empty or missing
-                if DEBUG:
-                    print(f"[DEBUG] Missing field '{field}' in order: {order}")
-                session["missing_field_context"]["order_id"] = order["order_id"]
-                session["missing_field_context"]["field"] = field
-                session["is_fixing"] = True
-                return f"For order {order['order_id']}, {field_prompts[field]}"
+        # Determine if the item requires addons
+        item = order['item']
+        requires_addons = item in ["burrito", "bowl", "taco", "salad"]  # Define which items require addons
+        if requires_addons:
+            for field in ["meats", "rice", "beans", "toppings"]:
+                if not order.get(field):  # Checks if the list is empty or missing
+                    if DEBUG:
+                        print(f"[DEBUG] Missing field '{field}' in order: {order}")
+                    session["missing_field_context"]["order_id"] = order["order_id"]
+                    session["missing_field_context"]["field"] = field
+                    session["is_fixing"] = True
+                    return f"For order {order['order_id']}, {field_prompts[field]}"
+        else:
+            # If item does not require addons, mark as completed
+            if not order.get("completed"):
+                db.get_db().Orders.update_one(
+                    {"session_id": session_id, "order_id": order["order_id"]},
+                    {"$set": {"completed": True}}
+                )
     session["is_fixing"] = False  # No missing fields left
     return None
 
@@ -474,25 +526,49 @@ def provide_options(session_id, session, sentence):
     else:
         return "You can order burritos, bowls, tacos, salads, and more."
 
+def handle_confirm(session_id, session, sentence):
+    return "Great! Let's continue with your order."
+
+def handle_deny(session_id, session, sentence):
+    return "Okay, let's clarify your request. What would you like to do?"
+
 # Mapping of intent tags to handler functions
 intent_handlers = {
+    "greeting": lambda sid, s, sen: random.choice(intents['intents'][0]['responses']),
+    "goodbye": lambda sid, s, sen: random.choice(intents['intents'][1]['responses']),
     "order": process_order,
-    "remove_id": remove_order_by_id,
-    "remove_desc": remove_order_by_description,
-    "remove_item": remove_order_by_description,  # Updated to handle 'remove_item' intent
+    "remove_item": remove_order_by_description,
     "modify_order": modify_order,
     "checkout": checkout_order,
-    # Interruption intents
     "check_order": check_order,
-    "restart": restart_order,
-    "restart_order": restart_order,  # Added to handle 'restart_order' intent
-    "menu": check_menu,
-    "show_menu": check_menu,  # Added to handle 'show_menu' intent
+    "restart_order": restart_order,
+    "show_menu": check_menu,
     "ask_options": provide_options,
+    "confirm": handle_confirm,
+    "deny": handle_deny,
+    "help": lambda sid, s, sen: random.choice(intents['intents'][16]['responses']),
+    "vegan_options": lambda sid, s, sen: random.choice(intents['intents'][14]['responses']),
+    "thanks": lambda sid, s, sen: random.choice(intents['intents'][6]['responses']),
+    "fallback": lambda sid, s, sen: random.choice(intents['intents'][-1]['responses'])
 }
 
 # Define the inactivity timeout
 INACTIVITY_TIMEOUT = timedelta(minutes=5)
+
+@app.route('/get_order', methods=['GET'])
+def get_order():
+    session_id = request.args.get('session_id')
+    if not session_id:
+        return jsonify({"error": "Missing session_id"}), 400
+    
+
+
+    order_details = list(db.get_db().Orders.find({"session_id": session_id}))
+
+    for order in order_details:
+        order['_id'] = str(order['_id'])
+    print(order_details)
+    return jsonify({"order_details": order_details})
 
 @app.route('/chat', methods=['POST', 'OPTIONS'])
 def chat():
@@ -516,8 +592,11 @@ def chat():
         session = sessions_collection.find_one({'session_id': session_id})
         if session:
             # Existing session
-            last_activity = session.get('last_activity', datetime.utcnow())
-            if datetime.utcnow() - last_activity > INACTIVITY_TIMEOUT:
+            last_activity = session.get('last_activity', datetime.now(timezone.utc))
+            if last_activity.tzinfo is None:  # Make datetime timezone-aware if it's naive
+                last_activity = last_activity.replace(tzinfo=timezone.utc)
+
+            if datetime.now(timezone.utc) - last_activity > INACTIVITY_TIMEOUT:
                 # Session has been inactive for more than 5 minutes
                 db_instance.Orders.delete_many({'session_id': session_id})
                 if DEBUG:
@@ -528,14 +607,14 @@ def chat():
                     'is_fixing': False,
                     'missing_field_context': {},
                     'chat_length': 0,
-                    'last_activity': datetime.utcnow()
+                    'last_activity': datetime.now(timezone.utc)
                 }
                 sessions_collection.replace_one({'session_id': session_id}, session, upsert=True)
             else:
                 # Update last_activity
                 sessions_collection.update_one(
                     {'session_id': session_id},
-                    {'$set': {'last_activity': datetime.utcnow()}}
+                    {'$set': {'last_activity': datetime.now(timezone.utc)}}
                 )
                 session['last_activity'] = datetime.utcnow()
                 if DEBUG:
@@ -547,7 +626,7 @@ def chat():
                 'is_fixing': False,
                 'missing_field_context': {},
                 'chat_length': 0,
-                'last_activity': datetime.utcnow()
+                'last_activity': datetime.now(timezone.utc)
             }
             sessions_collection.insert_one(session)
             if DEBUG:
@@ -560,7 +639,7 @@ def chat():
             'is_fixing': False,
             'missing_field_context': {},
             'chat_length': 0,
-            'last_activity': datetime.utcnow()
+            'last_activity': datetime.now(timezone.utc)
         }
         sessions_collection.insert_one(session)
         if DEBUG:
@@ -579,61 +658,71 @@ def chat():
     responses = []
 
     # Predict intent
-    predicted_tag = predict_intent(sentence)
+    predicted_tag, confidence = predict_intent(sentence)
 
     if DEBUG:
-        print(f"[DEBUG] Predicted intent: {predicted_tag}")
+        print(f"[DEBUG] Predicted intent: {predicted_tag}, Confidence: {confidence}")
 
-    # Handle the intent using the intent_handlers mapping
-    if predicted_tag in intent_handlers:
-        handler_function = intent_handlers[predicted_tag]
-        # Call the handler function
+    # Handle interrupt intents first
+    interrupt_intents = ["remove_item", "modify_order", "restart_order", "show_menu", "check_order", "ask_options"]  # Define all interrupt tags
+
+    if predicted_tag in interrupt_intents and confidence != "low":
+        # Handle interrupt intents immediately
+        handler_function = intent_handlers.get(predicted_tag, intent_handlers["fallback"])
         response = handler_function(session_id, session, sentence)
         responses.append(response)
+        
+        # After handling interrupt, check if there are missing fields
+        missing_fields_response = check_missing_fields(session)
+        if missing_fields_response:
+            responses.append(missing_fields_response)
+    elif is_fixing and confidence != "low":
+        # Handle slot filling
+        order_id_fix = missing_field_context.get("order_id")
+        field = missing_field_context.get("field")
 
-        # Update is_fixing from session in case it was modified
-        is_fixing = session.get("is_fixing", False)
-        missing_field_context = session.get("missing_field_context", {})
-
-        # If we were in the middle of fixing, and the intent was an interruption, prompt again
-        interruption_intents = ["check_order", "restart", "menu", "ask_options", "show_menu", "restart_order"]
-        if is_fixing and predicted_tag in interruption_intents:
-            field = missing_field_context.get("field")
-            if field and field in field_prompts:
-                responses.append(field_prompts[field])
-
-    elif is_fixing:
-        # User is providing missing field info
-        order_id_fix = missing_field_context["order_id"]
-        field = missing_field_context["field"]
-
-        # Extract the value using the updated function
-        value = extract_field_value(field, cleaned_sentence)
-
-        if DEBUG:
-            print(f"[DEBUG] Extracted value: {value}")
-
-        if value:
-            update_msg = update_order(session_id, order_id_fix, field, value)
-            responses.append(update_msg)
-            # After updating, check if there are more missing fields
-            missing_fields_response = check_missing_fields(session)
-            if missing_fields_response:
-                responses.append(missing_fields_response)
-            else:
-                responses.append("Anything else I can help with?")
-
-            # Update is_fixing after checking for missing fields
-            is_fixing = session.get("is_fixing", False)
-
-            # Update session data in the database
-            sessions_collection.replace_one({'session_id': session_id}, session, upsert=True)
-
+        if not order_id_fix or not field:
+            # Inconsistent session data
+            responses.append("I'm sorry, something went wrong with your order. Let's start over.")
+            session["is_fixing"] = False
+            session["missing_field_context"] = {}
         else:
-            responses.append(f"Sorry, I didn't understand what you're saying. {field_prompts[field]}")
+            # Extract the value using the updated function
+            value = extract_field_value(field, cleaned_sentence)
 
+            if DEBUG:
+                print(f"[DEBUG] Extracted value: {value}")
+
+            if value:
+                update_msg = update_order(session_id, order_id_fix, field, value)
+                responses.append(update_msg)
+                # After updating, check if there are more missing fields
+                missing_fields_response = check_missing_fields(session)
+                if missing_fields_response:
+                    responses.append(missing_fields_response)
+                else:
+                    responses.append("Anything else I can help with?")
+            else:
+                responses.append(f"Sorry, I didn't understand what you're saying. {field_prompts[field]}")
     else:
-        responses.append("I do not understand...")
+        # Handle other intents
+        if predicted_tag in intent_handlers and confidence != "low":
+            handler_function = intent_handlers[predicted_tag]
+            # Call the handler function
+            response = handler_function(session_id, session, sentence)
+            responses.append(response)
+
+            # Update is_fixing from session in case it was modified
+            is_fixing = session.get("is_fixing", False)
+            missing_field_context = session.get("missing_field_context", {})
+        elif confidence == "medium":
+            # Moderate confidence: ask for confirmation
+            responses.append(f"I think you want to {predicted_tag.replace('_', ' ')}. Is that correct?")
+        elif confidence == "low":
+            # Low confidence: use fallback intent
+            responses.append("I'm sorry, I didn't understand that. Could you please rephrase or specify your request?")
+        else:
+            responses.append("I do not understand...")
 
     # Update session data
     session['last_activity'] = datetime.utcnow()
@@ -654,7 +743,7 @@ def serve_static(path):
     else:
         return send_from_directory(app.static_folder, 'index.html')
 
-##Uncomment the following lines if you want to run the Flask app locally
-#if __name__ == '__main__':
-#    port = int(os.environ.get("PORT", 5000))
-#    app.run(host='0.0.0.0', port=port, debug=True)
+## Uncomment the following lines if you want to run the Flask app locally
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)
