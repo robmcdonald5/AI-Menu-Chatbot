@@ -205,12 +205,20 @@ def process_order_spacy(session_id, input_sentence):
     for meat in meats:
         if meat.lower() in doc_text:
             meats_op.append(meat)
-    for rice_type in rice:
-        if rice_type.lower() in doc_text:
-            rice_op.append(rice_type)
-    for bean in beans:
-        if bean.lower() in doc_text:
-            beans_op.append(bean)
+
+    if items and items[0] in ["salad", "salads" "quesadilla", "quesadillas", "tacos", "taco"]:
+        rice_op.append("X")
+    else:
+        for rice_type in rice:
+            if rice_type.lower() in doc_text:
+                rice_op.append(rice_type)
+
+    if items and items[0] in ["quesadilla", "quesadillas", "tacos", "taco"]:
+        rice_op.append("X")
+    else:
+        for bean in beans:
+            if bean.lower() in doc_text:
+                beans_op.append(bean)
     for topping in toppings:
         if topping.lower() in doc_text:
             toppings_op.append(topping)
