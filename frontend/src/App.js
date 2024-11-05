@@ -27,32 +27,32 @@ const OrderDetails = ({ orderDetails }) => {
               </h3>
             </div>
             <div className="pr-3">
-              <dix className="flex flex-wrap">
+              <div className="flex flex-wrap">
                 <p className="font-bold pr-2">Price:</p>
                 <p> {order.price}</p>
-              </dix>
-              <dix className="flex flex-wrap">
+              </div>
+              <div className="flex flex-wrap">
                 <p className="font-bold pr-2">Meat:</p>
                 <p> {order.meats}</p>
-              </dix>
-              <dix className="flex flex-wrap">
+              </div>
+              <div className="flex flex-wrap">
                 <p className="font-bold pr-2">Breans:</p>
                 <p> {order.beans}</p>
-              </dix>
-              <dix className="flex flex-wrap">
+              </div>
+              <div className="flex flex-wrap">
                 <p className="font-bold pr-2">Rice:</p>
                 <p> {order.rice}</p>
-              </dix>
+              </div>
             </div>
             <div>
-              <dix className="flex flex-wrap">
+              <div className="flex flex-wrap">
                 <p className="font-bold pr-2">Toppings:</p>
                 <p> {order.toppings}</p>
-              </dix>
-              <dix className="flex flex-wrap">
+              </div>
+              <div className="flex flex-wrap">
                 <p className="font-bold pr-2">Completed:</p>
                 <p> {order.completed ? "Yes" : "No"}</p>
-              </dix>
+              </div>
             </div>
           </div>
         </div>
