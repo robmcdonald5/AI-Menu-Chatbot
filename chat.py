@@ -11,6 +11,7 @@ from sklearn.cluster import KMeans
 from spacy.matcher import PhraseMatcher
 from sentence_transformers import SentenceTransformer
 from collections import Counter
+from word2number import w2n
 
 import os
 from datetime import datetime, timedelta
@@ -28,6 +29,12 @@ sentence_model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
 
 # Toggleable debug mode
 DEBUG = True  # Set to True to enable debug output
+
+
+none_var = ["none", "no", "nothing","nope", "nah", "null"]
+rice_var = ["white", "brown", "no rice"]
+beans_var = ["black", "pinto", "no beans"]
+toppings_var = ["tomato salsa","salsa", "corn salsa", "green salsa","red salsa", "lettuce", "no toppings"]
 
 # For visual clarity keep this function high in the stack
 def clean_sentence(sentence):
@@ -142,6 +149,20 @@ def text2int(textnum):
     }
     return num_words.get(textnum.lower(), 1)
 
+def replace_spelled_numbers(text):
+    words = text.split()
+    result = []
+
+    for word in words:
+        try:
+            # Convert spelled-out number to numeric equivalent
+            number = w2n.word_to_num(word)
+            result.append(str(number))
+        except ValueError:
+            result.append(word)
+
+    return " ".join(result)
+
 def extract_field_value(field, user_input):
     # Create a PhraseMatcher
     matcher = PhraseMatcher(nlp.vocab, attr="LOWER")
@@ -179,71 +200,86 @@ def extract_field_value(field, user_input):
         return None
 
 def process_order_spacy(session_id, input_sentence):
-    doc = nlp(input_sentence)
-    items = []
-    meats_op = []
-    rice_op = []
-    beans_op = []
-    toppings_op = []
-    quantity = 1
 
-    # Extract quantities
-    for ent in doc.ents:
-        if ent.label_ == 'CARDINAL':
-            try:
-                quantity = int(ent.text)
-            except ValueError:
-                quantity = text2int(ent.text)
+    input_sentence = replace_spelled_numbers(input_sentence)
+    articles = ["a", "an", "the"]
+    pattern = r"(?=\b(?:\d+|" + "|".join(articles) + r")\b)"
+    return_output = []
 
-    # Extract items
-    for token in doc:
-        if token.lemma_ in menu:
-            items.append(token.lemma_)
+    substrings = re.split(pattern, input_sentence)
 
-    # Extract addons
-    doc_text = doc.text.lower()
-    for meat in meats:
-        if meat.lower() in doc_text:
-            meats_op.append(meat)
 
-    if items and items[0] in ["salad", "salads" "quesadilla", "quesadillas", "tacos", "taco"]:
-        rice_op.append("X")
+    substrings = [s.strip() for s in substrings if s.strip()]
+
+    print(substrings)
+    for substring in substrings:
+        doc = nlp(substring)
+        items = []
+        meats_op = []
+        rice_op = []
+        beans_op = []
+        toppings_op = []
+        quantity = 1
+
+        # Extract quantities
+        for ent in doc.ents:
+            if ent.label_ == 'CARDINAL':
+                try:
+                    quantity = int(ent.text)
+                except ValueError:
+                    quantity = text2int(ent.text)
+
+        # Extract items
+        for token in doc:
+            if token.lemma_ in menu:
+                items.append(token.lemma_)
+
+        # Extract addons
+        doc_text = doc.text.lower()
+        for meat in meats:
+            if meat.lower() in doc_text:
+                meats_op.append(meat)
+
+        if items and items[0] in ["salad", "salads" "quesadilla", "quesadillas", "tacos", "taco"]:
+            rice_op.append("X")
+        else:
+            for rice_type in rice:
+                if rice_type.lower() in doc_text:
+                    rice_op.append(rice_type)
+
+        if items and items[0] in ["quesadilla", "quesadillas", "tacos", "taco"]:
+            beans_op.append("X")
+        else:
+            for bean in beans:
+                if bean.lower() in doc_text:
+                    beans_op.append(bean)
+        for topping in toppings:
+            if topping.lower() in doc_text:
+                toppings_op.append(topping)
+
+        if items:
+            for item in items:
+                price = menu[item]
+                for _ in range(quantity):
+                    # Generate the next order_id for this session
+                    order_id = get_next_order_id(session_id)
+                    # Insert the order into the database
+                    db.get_db().Orders.insert_one({
+                        "session_id": session_id,
+                        "order_id": order_id,
+                        "item": item,
+                        "price": price,
+                        "meats": meats_op if meats_op else [],
+                        "rice": rice_op if rice_op else [],
+                        "beans": beans_op if beans_op else [],
+                        "toppings": toppings_op if toppings_op else [],
+                        "completed": False  # Add completed flag
+                    })
+            return_output.append(f"{quantity} {', '.join(items)}")
+    if return_output:
+        return f"Okay cool! Added {', '.join(return_output)}."
     else:
-        for rice_type in rice:
-            if rice_type.lower() in doc_text:
-                rice_op.append(rice_type)
-
-    if items and items[0] in ["quesadilla", "quesadillas", "tacos", "taco"]:
-        rice_op.append("X")
-    else:
-        for bean in beans:
-            if bean.lower() in doc_text:
-                beans_op.append(bean)
-    for topping in toppings:
-        if topping.lower() in doc_text:
-            toppings_op.append(topping)
-
-    if items:
-        for item in items:
-            price = menu[item]
-            for _ in range(quantity):
-                # Generate the next order_id for this session
-                order_id = get_next_order_id(session_id)
-                # Insert the order into the database
-                db.get_db().Orders.insert_one({
-                    "session_id": session_id,
-                    "order_id": order_id,
-                    "item": item,
-                    "price": price,
-                    "meats": meats_op if meats_op else [],
-                    "rice": rice_op if rice_op else [],
-                    "beans": beans_op if beans_op else [],
-                    "toppings": toppings_op if toppings_op else [],
-                    "completed": False  # Add completed flag
-                })
-        return f"Added {quantity} {', '.join(items)} to your order."
-    else:
-        return "Sorry, I didn't understand the items you want to order."
+        return "I'm sorry, I didn't understand what you're ordering, try rewording it?."
 
 def update_order(session_id, order_id, field, value):
     if DEBUG:
