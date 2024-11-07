@@ -301,6 +301,17 @@ def process_order_spacy(session_id, input_sentence):
                 quantity = text2int(ent.text)
                 break
 
+    # Fetch current max order_id
+    last_order = db.get_db().Orders.find_one({"session_id": session_id}, sort=[("order_id", -1)])
+    current_max_order_id = last_order["order_id"] if last_order else 0
+
+    # Define required_addons mapping
+    required_addons = {
+        'burrito': ['meats', 'rice', 'beans', 'toppings'],
+        'bowl': ['rice', 'beans', 'toppings'],
+        # Add other items as needed
+    }
+
     # Create and insert orders
     if items:
         orders_to_insert = []
@@ -317,7 +328,8 @@ def process_order_spacy(session_id, input_sentence):
                 category_type = "non_entree"
 
             for _ in range(quantity):
-                order_id = get_next_order_id(session_id)
+                current_max_order_id += 1
+                order_id = current_max_order_id
                 order_document = {
                     "session_id": session_id,
                     "order_id": order_id,
