@@ -162,6 +162,20 @@ menu_matcher = PhraseMatcher(nlp.vocab, attr="LOWER")
 menu_patterns = [nlp.make_doc(name) for name in main_items]
 menu_matcher.add("MENU_ITEM", menu_patterns)
 
+# Define add-on categories
+addon_categories = {
+    "meats": meats,
+    "rice": rice,
+    "beans": beans,
+    "toppings": toppings
+}
+
+# Initialize a single PhraseMatcher for add-ons
+addon_matcher = PhraseMatcher(nlp.vocab, attr="LOWER")
+for category, addons in addon_categories.items():
+    patterns = [nlp.make_doc(addon) for addon in addons]
+    addon_matcher.add(category.upper(), patterns)
+
 # Create addons list
 addons_list = meats + rice + beans + toppings
 
@@ -241,6 +255,7 @@ def extract_menu_items(user_input):
 
 # Function to process order using SpaCy with improved association of add-ons
 def process_order_spacy(session_id, input_sentence):
+    # Segment input sentence
     segments = segment_input(input_sentence)
 
     if DEBUG:
@@ -250,26 +265,26 @@ def process_order_spacy(session_id, input_sentence):
     item_addons = defaultdict(lambda: {"meats": [], "rice": [], "beans": [], "toppings": []})
     items = []
 
-    # iterate through each segment to extract/identify corolated addons
+    # Iterate through each segment to extract and associate add-ons
     for seg in segments:
         doc = nlp(seg)
         main_items_in_seg = extract_menu_items(seg)
 
-        # extract addons main loop
+        # Extract add-ons only if a main item is present in the segment
         if main_items_in_seg:
             main_item = main_items_in_seg[0]
             items.append(main_item)
 
-            # category main loop
-            for addon in seg.lower():
-                if addon in meats:
-                    item_addons[main_item]["meats"].append(addon)
-                elif addon in rice:
-                    item_addons[main_item]["rice"].append(addon)
-                elif addon in beans:
-                    item_addons[main_item]["beans"].append(addon)
-                elif addon in toppings:
-                    item_addons[main_item]["toppings"].append(addon)
+            # Use the single addon_matcher to find all add-ons
+            matches = addon_matcher(doc)
+            for match_id, start, end in matches:
+                span = doc[start:end]
+                category = nlp.vocab.strings[match_id]  # Retrieve the category label
+                addon = span.text.lower()
+                # Map the category label back to lowercase for consistency
+                category_key = category.lower()
+                if addon not in item_addons[main_item][category_key]:
+                    item_addons[main_item][category_key].append(addon)
 
     if DEBUG:
         print(f"[DEBUG] Items extracted: {items}")
@@ -288,6 +303,8 @@ def process_order_spacy(session_id, input_sentence):
 
     # Create and insert orders
     if items:
+        orders_to_insert = []
+        confirmation_messages = []
         for item in items:
             item_details = menu.get(item, {})
             price = item_details.get('price', 0)
@@ -316,23 +333,28 @@ def process_order_spacy(session_id, input_sentence):
                     order_document["toppings"] = item_addons[item]["toppings"] if item_addons[item]["toppings"] else []
                 # Non-entrees do not have add-ons
 
-                db.get_db().Orders.insert_one(order_document)
-        # Prepare confirmation message
-        confirmation_messages = []
-        for item in items:
-            if is_entree(menu[item]['category']):
-                addons = []
-                addons.extend(item_addons[item]["meats"])
-                addons.extend(item_addons[item]["rice"])
-                addons.extend(item_addons[item]["beans"])
-                addons.extend(item_addons[item]["toppings"])
-                if addons:
-                    confirmation_messages.append(f"{item.capitalize()} with {', '.join(addons)}")
+                orders_to_insert.append(order_document)
+
+        # Insert all orders at once for efficiency
+        if orders_to_insert:
+            db.get_db().Orders.insert_many(orders_to_insert)
+
+            # Prepare confirmation messages
+            for order in orders_to_insert:
+                if order["category"] == "entree":
+                    addons = []
+                    addons.extend(order["meats"])
+                    addons.extend(order["rice"])
+                    addons.extend(order["beans"])
+                    addons.extend(order["toppings"])
+                    if addons:
+                        confirmation_messages.append(f"{order['item'].capitalize()} with {', '.join(addons)}")
+                    else:
+                        confirmation_messages.append(f"{order['item'].capitalize()}")
                 else:
-                    confirmation_messages.append(f"{item.capitalize()}")
-            else:
-                confirmation_messages.append(f"{item.capitalize()}")
-        return f"Added {', '.join(confirmation_messages)} to your order."
+                    confirmation_messages.append(f"{order['item'].capitalize()}")
+
+            return f"Added {', '.join(confirmation_messages)} to your order."
     else:
         return "Sorry, I didn't understand the items you want to order."
 
