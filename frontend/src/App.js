@@ -80,7 +80,7 @@ function App() {
 
   const fetchOrderDetails = async () => {
     try {
-      const response = await axios.get("http://localhost:5000/get_order", {
+      const response = await axios.get("https://chipotleaimenu.app/get_order", {
         params: { session_id: sessionId },
       });
       setOrderDetails(response.data.order_details);

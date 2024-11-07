@@ -21,7 +21,7 @@ from word2number import w2n
 from connect import database as db  # Ensure connect.py is correctly set up with get_db()
 
 app = Flask(__name__, static_folder='frontend/build')  # Set static_folder to frontend/build
-CORS(app, resources={r"/*": {"origins": ["http://localhost:3000"]}}, supports_credentials=True)
+CORS(app, resources={r"/*": {"origins": ["https://chipotleaimenu.app"]}}, supports_credentials=True)
 
 # Load SpaCy model and Sentence-BERT model
 nlp = spacy.load('en_core_web_sm')
@@ -84,7 +84,6 @@ def replace_spelled_numbers(text):
 def segment_input(input_sentence):
     input_sentence = replace_spelled_numbers(input_sentence)
     articles = ["a", "an", "the"]
-    #TVR
     pattern = r"(?=\b(?:\d+|" + "|".join(articles) + r")\b)"
     substrings = re.split(pattern, input_sentence)
     substrings = [s.strip() for s in substrings if s.strip()]
@@ -848,6 +847,6 @@ def serve_static(path):
         return send_from_directory(app.static_folder, 'index.html')
 
 ## Uncomment the following lines if you want to run the Flask app locally
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+#if __name__ == '__main__':
+#    port = int(os.environ.get("PORT", 5000))
+#    app.run(host='0.0.0.0', port=port, debug=True)

@@ -9,3 +9,4 @@ pysocks
 flask
 flask_cors
 waitress
+word2number
