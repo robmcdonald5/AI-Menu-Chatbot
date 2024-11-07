@@ -5,10 +5,10 @@ import time
 import socks  # Import PySocks
 import socket
 from urllib.parse import urlparse
-from dotenv import load_dotenv
+#from dotenv import load_dotenv
 
 # Load environment variables from .env
-load_dotenv()
+#load_dotenv()
 
 class Database:
     def __init__(self, db_name):
