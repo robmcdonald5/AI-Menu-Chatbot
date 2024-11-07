@@ -65,6 +65,17 @@ pattern_embeddings = sentence_model.encode(all_patterns)
 if DEBUG:
     print(f"[DEBUG] Loaded {len(all_patterns)} patterns for intent recognition.")
 
+def is_entree(category):
+    entree_categories = ['main', 'entree']
+    if isinstance(category, list):
+        # Convert all categories to lowercase for case-insensitive comparison
+        category = [c.lower() for c in category]
+        return any(cat in entree_categories for cat in category)
+    elif isinstance(category, str):
+        return category.lower() in entree_categories
+    else:
+        return False
+
 # Fetch menu data from the database
 def fetch_menu_data():
     db_instance = db.get_db()
@@ -72,27 +83,29 @@ def fetch_menu_data():
     # Access the MenuItem collection
     menu_item_collection = db_instance['MenuItem']
 
-    # Fetch main menu items with case-insensitive matching and handle arrays
-    main_items_cursor = menu_item_collection.find({
-        '$or': [
-            {'category': {'$regex': '^main$', '$options': 'i'}},
-            {'category': {'$elemMatch': {'$regex': '^main$', '$options': 'i'}}}
-        ]
-    })
-    main_items = list(main_items_cursor)
+    # Fetch all menu items
+    all_items_cursor = menu_item_collection.find({})
+    all_items = list(all_items_cursor)
 
-    # Build the menu dictionary with item names and prices
+    # Build the menu dictionary with item details
     menu = {}
-    for item in main_items:
+    for item in all_items:
         name = item['name'].lower()
-        if 'size_details' in item and item['size_details']:
-            price = item['size_details'][0].get('price', 0)
-            menu[name] = price
+        price = item['size_details'][0].get('price', 0) if 'size_details' in item and item['size_details'] else 0
+        category = item.get('category', 'other')
+        if isinstance(category, list):
+            category = [c.lower() for c in category]
+        elif isinstance(category, str):
+            category = category.lower()
         else:
-            menu[name] = 0  # Default price if not available
+            category = 'other'
+        menu[name] = {
+            'price': price,
+            'category': category
+        }
 
     if DEBUG:
-        print(f"[DEBUG] Menu items: {list(menu.keys())}")
+        print(f"[DEBUG] Loaded {len(menu)} menu items.")
 
     # Fetch addons and normalize names to lowercase
     meats = [item['name'].lower() for item in menu_item_collection.find({'category': {'$regex': '^protein$', '$options': 'i'}})]
@@ -108,7 +121,13 @@ def fetch_menu_data():
 
     return menu, meats, rice, beans, toppings
 
+# Initial fetch of menu data
 menu, meats, rice, beans, toppings = fetch_menu_data()
+
+# Initialize PhraseMatcher for menu items
+menu_matcher = PhraseMatcher(nlp.vocab, attr="LOWER")
+menu_patterns = [nlp.make_doc(name) for name in menu.keys()]
+menu_matcher.add("MENU_ITEM", menu_patterns)
 
 # Create addons list
 addons_list = meats + rice + beans + toppings
@@ -158,7 +177,7 @@ def extract_field_value(field, user_input):
     doc = nlp(user_input)
     if DEBUG:
         print(f"[DEBUG] Field: {field}")
-        print(f"[DEBUG] Patterns: {[doc.text for doc in patterns]}")
+        print(f"[DEBUG] Patterns: {[pattern.text for pattern in patterns]}")
         print(f"[DEBUG] User Input: {user_input}")
     matches = matcher(doc)
     if matches:
@@ -175,10 +194,22 @@ def extract_field_value(field, user_input):
             print("[DEBUG] No matches found.")
         return None
 
+# Function to extract menu items using PhraseMatcher
+def extract_menu_items(user_input):
+    doc = nlp(user_input)
+    matches = menu_matcher(doc)
+    items = set()
+    for match_id, start, end in matches:
+        span = doc[start:end]
+        items.add(span.text.lower())
+    if DEBUG:
+        print(f"[DEBUG] Extracted menu items: {items}")
+    return list(items)
+
 # Function to process order using SpaCy
 def process_order_spacy(session_id, input_sentence):
     doc = nlp(input_sentence)
-    items = []
+    items = extract_menu_items(input_sentence)  # Use PhraseMatcher
     meats_op = []
     rice_op = []
     beans_op = []
@@ -193,45 +224,52 @@ def process_order_spacy(session_id, input_sentence):
             except ValueError:
                 quantity = text2int(ent.text)
 
-    # Extract items
-    for token in doc:
-        if token.lemma_ in menu:
-            items.append(token.lemma_)
-
     # Extract addons
     doc_text = doc.text.lower()
     for meat in meats:
-        if meat.lower() in doc_text:
+        if meat in doc_text:
             meats_op.append(meat)
     for rice_type in rice:
-        if rice_type.lower() in doc_text:
+        if rice_type in doc_text:
             rice_op.append(rice_type)
     for bean in beans:
-        if bean.lower() in doc_text:
+        if bean in doc_text:
             beans_op.append(bean)
     for topping in toppings:
-        if topping.lower() in doc_text:
+        if topping in doc_text:
             toppings_op.append(topping)
 
     if items:
         for item in items:
-            price = menu[item]
+            item_details = menu.get(item, {})
+            price = item_details.get('price', 0)
+            category = item_details.get('category', 'other')
+
+            # Determine if the item is an entree
+            if is_entree(category):
+                category_type = "entree"
+            else:
+                category_type = "non_entree"
+
             for _ in range(quantity):
-                # Generate the next order_id for this session
                 order_id = get_next_order_id(session_id)
-                # Insert the order into the database
-                db.get_db().Orders.insert_one({
+                order_document = {
                     "session_id": session_id,
                     "order_id": order_id,
                     "item": item,
                     "price": price,
-                    "meats": meats_op if meats_op else [],
-                    "rice": rice_op if rice_op else [],
-                    "beans": beans_op if beans_op else [],
-                    "toppings": toppings_op if toppings_op else [],
-                    "completed": False  # Add completed flag
-                })
-        return f"Added {quantity} {', '.join(items)} to your order."
+                    "category": category_type,  # standardized category
+                    "completed": False
+                }
+                if category_type == "entree":
+                    order_document["meats"] = meats_op.copy() if meats_op else []
+                    order_document["rice"] = rice_op.copy() if rice_op else []
+                    order_document["beans"] = beans_op.copy() if beans_op else []
+                    order_document["toppings"] = toppings_op.copy() if toppings_op else []
+                # Non-entrees do not have add-ons
+
+                db.get_db().Orders.insert_one(order_document)
+        return f"Added {quantity} {', '.join([item.capitalize() for item in items])} to your order."
     else:
         return "Sorry, I didn't understand the items you want to order."
 
@@ -264,11 +302,19 @@ def display_current_order(session_id):
     if orders:
         response_lines = [f"Here is your current order:"]
         for order in orders:
-            meats = ', '.join(order['meats']) if order['meats'] else 'None'
-            rice = ', '.join(order['rice']) if order['rice'] else 'None'
-            beans = ', '.join(order['beans']) if order['beans'] else 'None'
-            toppings = ', '.join(order['toppings']) if order['toppings'] else 'None'
-            response_lines.append(f"Order ID: {order['order_id']}, Item: {order['item']}, Meats: {meats}, Rice: {rice}, Beans: {beans}, Toppings: {toppings}")
+            category = order.get("category", "other")
+            if is_entree(category):
+                meats = ', '.join(order['meats']) if order.get('meats') else 'None'
+                rice = ', '.join(order['rice']) if order.get('rice') else 'None'
+                beans = ', '.join(order['beans']) if order.get('beans') else 'None'
+                toppings = ', '.join(order['toppings']) if order.get('toppings') else 'None'
+                response_lines.append(
+                    f"Order ID: {order['order_id']}, Item: {order['item'].capitalize()}, "
+                    f"Meats: {meats}, Rice: {rice}, Beans: {beans}, Toppings: {toppings}"
+                )
+            else:
+                # For non-entrees, just display item
+                response_lines.append(f"Order ID: {order['order_id']}, Item: {order['item'].capitalize()}")
         return '\n'.join(response_lines)
     else:
         return "Your order is currently empty."
@@ -413,10 +459,9 @@ def check_missing_fields(session):
     if DEBUG:
         print(f"[DEBUG] Orders with missing fields: {orders}")
     for order in orders:
-        # Determine if the item requires addons
-        item = order['item']
-        requires_addons = item in ["burrito", "bowl", "taco", "salad"]  # Define which items require addons
-        if requires_addons:
+        category = order.get("category", "other")
+        if is_entree(category):
+            # Iterate over each required add-on field
             for field in ["meats", "rice", "beans", "toppings"]:
                 if not order.get(field):  # Checks if the list is empty or missing
                     if DEBUG:
@@ -426,7 +471,7 @@ def check_missing_fields(session):
                     session["is_fixing"] = True
                     return f"For order {order['order_id']}, {field_prompts[field]}"
         else:
-            # If item does not require addons, mark as completed
+            # Non-entrees do not require add-ons; mark as completed
             if not order.get("completed"):
                 db.get_db().Orders.update_one(
                     {"session_id": session_id, "order_id": order["order_id"]},
@@ -436,7 +481,6 @@ def check_missing_fields(session):
     return None
 
 # Intent handler functions
-
 def process_order(session_id, session, sentence):
     response = process_order_spacy(session_id, sentence)
     session['chat_length'] += 1
@@ -483,7 +527,7 @@ def checkout_order(session_id, session, sentence):
     session['is_fixing'] = False
     session['missing_field_context'] = {}
     session['chat_length'] = 0
-    session['last_activity'] = datetime.utcnow()
+    session['last_activity'] = datetime.now(timezone.utc)  # Fixed datetime.utcnow() to timezone-aware
     return response
 
 def check_order(session_id, session, sentence):
@@ -497,11 +541,11 @@ def restart_order(session_id, session, sentence):
     session['is_fixing'] = False
     session['missing_field_context'] = {}
     session['chat_length'] = 0
-    session['last_activity'] = datetime.utcnow()
+    session['last_activity'] = datetime.now(timezone.utc)  # Fixed datetime.utcnow() to timezone-aware
     return "Your order has been reset. You can start a new order."
 
 def check_menu(session_id, session, sentence):
-    menu_items = ', '.join(menu.keys())
+    menu_items = ', '.join([item.capitalize() for item in menu.keys()])
     return f"Our main items are: {menu_items}"
 
 def provide_options(session_id, session, sentence):
@@ -557,14 +601,13 @@ def get_order():
     session_id = request.args.get('session_id')
     if not session_id:
         return jsonify({"error": "Missing session_id"}), 400
-    
-
 
     order_details = list(db.get_db().Orders.find({"session_id": session_id}))
 
     for order in order_details:
         order['_id'] = str(order['_id'])
-    print(order_details)
+    if DEBUG:
+        print(order_details)
     return jsonify({"order_details": order_details})
 
 @app.route('/chat', methods=['POST', 'OPTIONS'])
@@ -613,7 +656,7 @@ def chat():
                     {'session_id': session_id},
                     {'$set': {'last_activity': datetime.now(timezone.utc)}}
                 )
-                session['last_activity'] = datetime.utcnow()
+                session['last_activity'] = datetime.now(timezone.utc)  # Changed from datetime.utcnow()
                 if DEBUG:
                     print(f"[DEBUG] Existing session found with session_id: {session_id}")
         else:
@@ -722,7 +765,7 @@ def chat():
             responses.append("I do not understand...")
 
     # Update session data
-    session['last_activity'] = datetime.utcnow()
+    session['last_activity'] = datetime.now(timezone.utc)  # Changed from datetime.utcnow()
     sessions_collection.replace_one({'session_id': session_id}, session, upsert=True)
 
     return jsonify({"response": "\n".join(responses), "session_id": session_id})
