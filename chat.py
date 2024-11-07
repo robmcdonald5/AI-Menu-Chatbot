@@ -14,6 +14,8 @@ from collections import Counter
 import os
 from datetime import datetime, timedelta, timezone
 from sklearn.preprocessing import MinMaxScaler
+from collections import defaultdict
+from word2number import w2n
 
 # Import the database connection
 from connect import database as db  # Ensure connect.py is correctly set up with get_db()
@@ -64,6 +66,29 @@ pattern_embeddings = sentence_model.encode(all_patterns)
 
 if DEBUG:
     print(f"[DEBUG] Loaded {len(all_patterns)} patterns for intent recognition.")
+
+def replace_spelled_numbers(text):
+    words = text.split()
+    result = []
+
+    for word in words:
+        try:
+            # Convert spelled-out number to numeric equivalent
+            number = w2n.word_to_num(word)
+            result.append(str(number))
+        except ValueError:
+            result.append(word)
+
+    return " ".join(result)
+
+def segment_input(input_sentence):
+    input_sentence = replace_spelled_numbers(input_sentence)
+    articles = ["a", "an", "the"]
+    #TVR
+    pattern = r"(?=\b(?:\d+|" + "|".join(articles) + r")\b)"
+    substrings = re.split(pattern, input_sentence)
+    substrings = [s.strip() for s in substrings if s.strip()]
+    return substrings
 
 def is_entree(category):
     entree_categories = ['main', 'entree']
@@ -119,14 +144,23 @@ def fetch_menu_data():
         print(f"[DEBUG] Beans list: {beans}")
         print(f"[DEBUG] Toppings list: {toppings}")
 
-    return menu, meats, rice, beans, toppings
+    # Define add-ons
+    addons = set(meats + rice + beans + toppings)
+
+    # Define main items: all menu items not in add-ons
+    main_items = [name for name in menu.keys() if name not in addons]
+
+    if DEBUG:
+        print(f"[DEBUG] Main items: {main_items}")
+
+    return menu, meats, rice, beans, toppings, main_items
 
 # Initial fetch of menu data
-menu, meats, rice, beans, toppings = fetch_menu_data()
+menu, meats, rice, beans, toppings, main_items = fetch_menu_data()
 
-# Initialize PhraseMatcher for menu items
+# Initialize PhraseMatcher for main menu items only
 menu_matcher = PhraseMatcher(nlp.vocab, attr="LOWER")
-menu_patterns = [nlp.make_doc(name) for name in menu.keys()]
+menu_patterns = [nlp.make_doc(name) for name in main_items]
 menu_matcher.add("MENU_ITEM", menu_patterns)
 
 # Create addons list
@@ -206,39 +240,54 @@ def extract_menu_items(user_input):
         print(f"[DEBUG] Extracted menu items: {items}")
     return list(items)
 
-# Function to process order using SpaCy
+# Function to process order using SpaCy with improved association of add-ons
 def process_order_spacy(session_id, input_sentence):
-    doc = nlp(input_sentence)
-    items = extract_menu_items(input_sentence)  # Use PhraseMatcher
-    meats_op = []
-    rice_op = []
-    beans_op = []
-    toppings_op = []
-    quantity = 1
+    segments = segment_input(input_sentence)
 
-    # Extract quantities
-    for ent in doc.ents:
+    if DEBUG:
+        print(f"[DEBUG] Segments: {segments}")
+
+    # Initialize a dictionary to hold add-ons for each item
+    item_addons = defaultdict(lambda: {"meats": [], "rice": [], "beans": [], "toppings": []})
+    items = []
+
+    # iterate through each segment to extract/identify corolated addons
+    for seg in segments:
+        doc = nlp(seg)
+        main_items_in_seg = extract_menu_items(seg)
+
+        # extract addons main loop
+        if main_items_in_seg:
+            main_item = main_items_in_seg[0]
+            items.append(main_item)
+
+            # category main loop
+            for addon in seg.lower():
+                if addon in meats:
+                    item_addons[main_item]["meats"].append(addon)
+                elif addon in rice:
+                    item_addons[main_item]["rice"].append(addon)
+                elif addon in beans:
+                    item_addons[main_item]["beans"].append(addon)
+                elif addon in toppings:
+                    item_addons[main_item]["toppings"].append(addon)
+
+    if DEBUG:
+        print(f"[DEBUG] Items extracted: {items}")
+        print(f"[DEBUG] Item addons: {dict(item_addons)}")
+
+    # Extract quantity (assuming total quantity applies to all items)
+    quantity = 1
+    for ent in nlp(input_sentence).ents:
         if ent.label_ == 'CARDINAL':
             try:
                 quantity = int(ent.text)
+                break  # Use the first numerical value found
             except ValueError:
                 quantity = text2int(ent.text)
+                break
 
-    # Extract addons
-    doc_text = doc.text.lower()
-    for meat in meats:
-        if meat in doc_text:
-            meats_op.append(meat)
-    for rice_type in rice:
-        if rice_type in doc_text:
-            rice_op.append(rice_type)
-    for bean in beans:
-        if bean in doc_text:
-            beans_op.append(bean)
-    for topping in toppings:
-        if topping in doc_text:
-            toppings_op.append(topping)
-
+    # Create and insert orders
     if items:
         for item in items:
             item_details = menu.get(item, {})
@@ -262,14 +311,29 @@ def process_order_spacy(session_id, input_sentence):
                     "completed": False
                 }
                 if category_type == "entree":
-                    order_document["meats"] = meats_op.copy() if meats_op else []
-                    order_document["rice"] = rice_op.copy() if rice_op else []
-                    order_document["beans"] = beans_op.copy() if beans_op else []
-                    order_document["toppings"] = toppings_op.copy() if toppings_op else []
+                    order_document["meats"] = item_addons[item]["meats"] if item_addons[item]["meats"] else []
+                    order_document["rice"] = item_addons[item]["rice"] if item_addons[item]["rice"] else []
+                    order_document["beans"] = item_addons[item]["beans"] if item_addons[item]["beans"] else []
+                    order_document["toppings"] = item_addons[item]["toppings"] if item_addons[item]["toppings"] else []
                 # Non-entrees do not have add-ons
 
                 db.get_db().Orders.insert_one(order_document)
-        return f"Added {quantity} {', '.join([item.capitalize() for item in items])} to your order."
+        # Prepare confirmation message
+        confirmation_messages = []
+        for item in items:
+            if is_entree(menu[item]['category']):
+                addons = []
+                addons.extend(item_addons[item]["meats"])
+                addons.extend(item_addons[item]["rice"])
+                addons.extend(item_addons[item]["beans"])
+                addons.extend(item_addons[item]["toppings"])
+                if addons:
+                    confirmation_messages.append(f"{item.capitalize()} with {', '.join(addons)}")
+                else:
+                    confirmation_messages.append(f"{item.capitalize()}")
+            else:
+                confirmation_messages.append(f"{item.capitalize()}")
+        return f"Added {', '.join(confirmation_messages)} to your order."
     else:
         return "Sorry, I didn't understand the items you want to order."
 
@@ -303,7 +367,7 @@ def display_current_order(session_id):
         response_lines = [f"Here is your current order:"]
         for order in orders:
             category = order.get("category", "other")
-            if is_entree(category):
+            if category == "entree":
                 meats = ', '.join(order['meats']) if order.get('meats') else 'None'
                 rice = ', '.join(order['rice']) if order.get('rice') else 'None'
                 beans = ', '.join(order['beans']) if order.get('beans') else 'None'
@@ -337,7 +401,7 @@ def remove_items_by_ids(session_id, order_ids):
     for oid in order_ids:
         order = db.get_db().Orders.find_one({"session_id": session_id, "order_id": oid})
         if order:
-            removed_items.append(f"{order['item']} (Order ID {oid})")
+            removed_items.append(f"{order['item'].capitalize()} (Order ID {oid})")
             db.get_db().Orders.delete_one({"session_id": session_id, "order_id": oid})
     return removed_items
 
@@ -393,7 +457,7 @@ def remove_items_by_features(session_id, features):
     orders_to_remove = list(db.get_db().Orders.find(query))
 
     for order in orders_to_remove:
-        removed_items.append(f"{order['item']} (Order ID {order['order_id']})")
+        removed_items.append(f"{order['item'].capitalize()} (Order ID {order['order_id']})")
         db.get_db().Orders.delete_one({"session_id": session_id, "order_id": order["order_id"]})
 
     return removed_items
@@ -460,7 +524,7 @@ def check_missing_fields(session):
         print(f"[DEBUG] Orders with missing fields: {orders}")
     for order in orders:
         category = order.get("category", "other")
-        if is_entree(category):
+        if category == "entree":
             # Iterate over each required add-on field
             for field in ["meats", "rice", "beans", "toppings"]:
                 if not order.get(field):  # Checks if the list is empty or missing
@@ -545,7 +609,7 @@ def restart_order(session_id, session, sentence):
     return "Your order has been reset. You can start a new order."
 
 def check_menu(session_id, session, sentence):
-    menu_items = ', '.join([item.capitalize() for item in menu.keys()])
+    menu_items = ', '.join([item.capitalize() for item in main_items])
     return f"Our main items are: {menu_items}"
 
 def provide_options(session_id, session, sentence):
