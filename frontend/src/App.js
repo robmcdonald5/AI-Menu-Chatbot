@@ -4,6 +4,11 @@ import React, { useState, useEffect, useRef } from "react";
 import bowl from "./bowl.svg";
 import axios from "axios";
 
+const baseURL =
+  process.env.NODE_ENV === "production"
+    ? "https://chipotleaimenu.app"
+    : "http://localhost:5000";
+
 const OrderDetails = ({ orderDetails }) => {
   if (!Array.isArray(orderDetails)) {
     return <div>Order is currently empty!</div>;
@@ -116,11 +121,6 @@ function App() {
         message: userInput,
         session_id: sessionId, // Include session_id in the request
       };
-
-      const baseURL =
-        process.env.NODE_ENV === "production"
-          ? "https://chipotleaimenu.app"
-          : "http://localhost:5000";
 
       const response = await axios.post(`${baseURL}/chat`, dataToSend, {
         headers: {
