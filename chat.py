@@ -21,7 +21,8 @@ from word2number import w2n
 from connect import database as db  # Ensure connect.py is correctly set up with get_db()
 
 app = Flask(__name__, static_folder='frontend/build')  # Set static_folder to frontend/build
-CORS(app, resources={r"/*": {"origins": ["https://chipotleaimenu.app"]}}, supports_credentials=True)
+CORS(app, resources={r"/*": {"origins": ["http://localhost:5001"]}}, supports_credentials=True)
+#CORS(app, resources={r"/*": {"origins": ["https://chipotleaimenu.app"]}}, supports_credentials=True)
 
 # Load SpaCy model and Sentence-BERT model
 nlp = spacy.load('en_core_web_sm')
@@ -709,6 +710,17 @@ def get_order():
 
 @app.route('/chat', methods=['POST', 'OPTIONS'])
 def chat():
+    if request.method == 'OPTIONS':
+        return _build_cors_preflight_response()
+    
+    if request.method == "OPTIONS":
+        # Explicitly handle OPTIONS to respond with appropriate CORS headers
+        response = jsonify({"status": "preflight OK"})
+        response.headers.add("Access-Control-Allow-Origin", "http://localhost:5001")
+        response.headers.add("Access-Control-Allow-Credentials", "true")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
+        response.headers.add("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+        return response, 200
     try:
         data = request.json
         if not data or 'message' not in data:
@@ -866,7 +878,17 @@ def chat():
     sessions_collection.replace_one({'session_id': session_id}, session, upsert=True)
 
     return jsonify({"response": "\n".join(responses), "session_id": session_id})
+def _build_cors_preflight_response():
+    response = jsonify({'status': 'OK'})
+    response.headers.add("Access-Control-Allow-Origin", "http://localhost:5001")
+    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
 
+def _corsify_actual_response(response):
+    response.headers.add("Access-Control-Allow-Origin", "http://localhost:5001")
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
 # Serve React frontend
 @app.route('/')
 def home():
@@ -881,6 +903,6 @@ def serve_static(path):
         return send_from_directory(app.static_folder, 'index.html')
 
 ## Uncomment the following lines if you want to run the Flask app locally
-#if __name__ == '__main__':
-#    port = int(os.environ.get("PORT", 5000))
-#    app.run(host='0.0.0.0', port=port, debug=True)
+if __name__ == '__main__':
+   port = int(os.environ.get("PORT", 5000))
+   app.run(host='0.0.0.0', port=port, debug=True)

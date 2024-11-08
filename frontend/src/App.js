@@ -14,6 +14,17 @@ const OrderDetails = ({ orderDetails }) => {
     return <div>Order is currently empty!</div>;
   }
 
+  const attributeDisplayNames = {
+    price: "Price",
+    item: "Item",
+    meats: "Meat",
+    beans: "Beans",
+    rice: "Rice",
+    toppings: "Toppings",
+    completed: "Completed",
+    // Add more attributes as needed
+  };
+
   return (
     <div className="">
       {orderDetails.map((order) => (
@@ -31,33 +42,26 @@ const OrderDetails = ({ orderDetails }) => {
                 {order.order_id}
               </h3>
             </div>
-            <div className="pr-3">
-              <div className="flex flex-wrap">
-                <p className="font-bold pr-2">Price:</p>
-                <p> {order.price}</p>
-              </div>
-              <div className="flex flex-wrap">
-                <p className="font-bold pr-2">Meat:</p>
-                <p> {order.meats}</p>
-              </div>
-              <div className="flex flex-wrap">
-                <p className="font-bold pr-2">Breans:</p>
-                <p> {order.beans}</p>
-              </div>
-              <div className="flex flex-wrap">
-                <p className="font-bold pr-2">Rice:</p>
-                <p> {order.rice}</p>
-              </div>
-            </div>
-            <div>
-              <div className="flex flex-wrap">
-                <p className="font-bold pr-2">Toppings:</p>
-                <p> {order.toppings}</p>
-              </div>
-              <div className="flex flex-wrap">
-                <p className="font-bold pr-2">Completed:</p>
-                <p> {order.completed ? "Yes" : "No"}</p>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3  pr-3">
+              {Object.keys(attributeDisplayNames).map((key) => {
+                if (key in order && order[key] !== 'X') {
+                  return (
+                    <div key={key} className="flex flex-wrap">
+                      <p className="font-bold pr-2">
+                        {attributeDisplayNames[key]}:
+                      </p>
+                      <p>
+                        {key === "completed"
+                          ? order[key]
+                            ? "Yes"
+                            : "No"
+                          : order[key]}
+                      </p>
+                    </div>
+                  );
+                }
+                return null;
+              })}
             </div>
           </div>
         </div>
