@@ -63,7 +63,7 @@
       ]
     },
     {
-      "tag": "remove_item",
+      "tag": "remove_order",
       "patterns": [
         "I want to remove an item",
         "Can I delete an item",
@@ -77,7 +77,13 @@
         "Can you remove",
         "Delete from my order",
         "Get rid of",
-        "Please delete"
+        "Please delete",
+        "Remove order ID",
+        "Delete order number",
+        "Cancel item with ID",
+        "Remove the second item",
+        "Delete burrito from my order",
+        "Take out the salad I ordered"
       ],
       "responses": [
         "Sure, which item would you like to remove?",
@@ -95,7 +101,13 @@
         "I want to edit my order",
         "Change something in my order",
         "I want to adjust my order",
-        "Can I alter my order"
+        "Can I alter my order",
+        "Modify my order",
+        "Update my order details",
+        "Change the second item in my order",
+        "Edit the toppings on my burrito",
+        "Adjust the quantity of bowls",
+        "I want to add more rice to my bowl"
       ],
       "responses": [
         "Sure, what changes would you like to make?",
@@ -104,7 +116,7 @@
       ]
     },
     {
-      "tag": "restart_order",
+      "tag": "reset_order",
       "patterns": [
         "I want to start over",
         "Reset my order",
@@ -117,7 +129,10 @@
         "Let's start over",
         "I want to restart",
         "Restarting my order",
-        "Can I reset my order"
+        "Can I reset my order",
+        "Start my order from scratch",
+        "Erase my current order",
+        "Remove all items from my order"
       ],
       "responses": [
         "Your order has been reset. You can start a new order.",

@@ -2,20 +2,20 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import random
 import json
-import torch
 import re
 import spacy
 import numpy as np
 import uuid
-from sklearn.cluster import KMeans
 from spacy.matcher import PhraseMatcher
 from sentence_transformers import SentenceTransformer
-from collections import Counter
+from collections import defaultdict
 import os
 from datetime import datetime, timedelta, timezone
 from sklearn.preprocessing import MinMaxScaler
-from collections import defaultdict
 from word2number import w2n
+import logging
+from logging.handlers import RotatingFileHandler
+import sys
 
 # Import the database connection
 from connect import database as db  # Ensure connect.py is correctly set up with get_db()
@@ -24,12 +24,47 @@ app = Flask(__name__, static_folder='frontend/build')  # Set static_folder to fr
 CORS(app, resources={r"/*": {"origins": ["http://localhost:5001"]}}, supports_credentials=True)
 #CORS(app, resources={r"/*": {"origins": ["https://chipotleaimenu.app"]}}, supports_credentials=True)
 
+## Logging Configuration ##
+
+# Toggleable debug mode
+DEBUG = True  # Set to False in production
+
+# Create the root logger
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)  # Default to INFO to reduce verbosity
+
+# Create formatter
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+
+# Create and configure console handler
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setLevel(logging.INFO)  # Console shows INFO and above
+console_handler.setFormatter(formatter)
+root_logger.addHandler(console_handler)
+
+# Create and configure rotating file handler
+file_handler = RotatingFileHandler("chatbot.log", maxBytes=5*1024*1024, backupCount=5)  # 5MB per file, keep last 5
+file_handler.setLevel(logging.DEBUG if DEBUG else logging.INFO)  # File logs DEBUG if DEBUG=True
+file_handler.setFormatter(formatter)
+root_logger.addHandler(file_handler)
+
+# Suppress verbose logs from external libraries
+logging.getLogger('pymongo').setLevel(logging.WARNING)
+logging.getLogger('urllib3').setLevel(logging.WARNING)
+logging.getLogger('sentence_transformers').setLevel(logging.WARNING)
+logging.getLogger('spacy').setLevel(logging.WARNING)
+logging.getLogger('werkzeug').setLevel(logging.WARNING)  # Flask's built-in server
+# Add any other external libraries as needed
+
+# Create a logger for your application
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG if DEBUG else logging.INFO)  # Application logger
+
+## End of Logging Configuration ##
+
 # Load SpaCy model and Sentence-BERT model
 nlp = spacy.load('en_core_web_sm')
 sentence_model = SentenceTransformer('all-mpnet-base-v2')
-
-# Toggleable debug mode
-DEBUG = True  # Set to True to enable debug output
 
 # Define similarity thresholds
 SIMILARITY_THRESHOLD_HIGH = 0.7  # High confidence
@@ -50,6 +85,9 @@ def clean_sentence(sentence):
 with open('intents.json', 'r') as f:
     intents = json.load(f)
 
+# Create a dictionary mapping tags to their respective intents for easier access
+intents_dict = {intent['tag']: intent for intent in intents['intents']}
+
 # Precompute intent embeddings
 all_patterns = []
 pattern_tags = []
@@ -66,7 +104,32 @@ for intent in intents['intents']:
 pattern_embeddings = sentence_model.encode(all_patterns)
 
 if DEBUG:
-    print(f"[DEBUG] Loaded {len(all_patterns)} patterns for intent recognition.")
+    logger.debug(f"Loaded {len(all_patterns)} patterns for intent recognition.")
+
+## Helper Functions ##
+
+# Function to update order
+def update_order(session_id, order_id, field, value):
+    if DEBUG:
+        order_before = db.get_db().Orders.find_one({"session_id": session_id, "order_id": order_id})
+        logger.debug(f"Order before update: {order_before}")
+    result = db.get_db().Orders.update_one(
+        {"session_id": session_id, "order_id": order_id},
+        {"$set": {field: value}}
+    )
+    if DEBUG:
+        logger.debug(f"Update result: matched {result.matched_count}, modified {result.modified_count}")
+    # Check if order is now complete
+    order = db.get_db().Orders.find_one({"session_id": session_id, "order_id": order_id})
+    if DEBUG:
+        logger.debug(f"Updated order: {order}")
+    required_fields = ["meats", "rice", "beans", "toppings"]
+    if all(order.get(f) for f in required_fields):
+        db.get_db().Orders.update_one(
+            {"session_id": session_id, "order_id": order_id},
+            {"$set": {"completed": True}}
+        )
+    return f"Updated order {order_id} with {field}: {', '.join(value)}"
 
 def replace_spelled_numbers(text):
     words = text.split()
@@ -129,8 +192,7 @@ def fetch_menu_data():
             'category': category
         }
 
-    if DEBUG:
-        print(f"[DEBUG] Loaded {len(menu)} menu items.")
+    logger.debug(f"Loaded {len(menu)} menu items.")
 
     # Fetch addons and normalize names to lowercase
     meats = [item['name'].lower() for item in menu_item_collection.find({'category': {'$regex': '^protein$', '$options': 'i'}})]
@@ -138,11 +200,10 @@ def fetch_menu_data():
     beans = [item['name'].lower() for item in menu_item_collection.find({'category': {'$regex': '^beans$', '$options': 'i'}})]
     toppings = [item['name'].lower() for item in menu_item_collection.find({'category': {'$regex': '^toppings$', '$options': 'i'}})]
 
-    if DEBUG:
-        print(f"[DEBUG] Meats list: {meats}")
-        print(f"[DEBUG] Rice list: {rice}")
-        print(f"[DEBUG] Beans list: {beans}")
-        print(f"[DEBUG] Toppings list: {toppings}")
+    logger.debug(f"Meats list: {meats}")
+    logger.debug(f"Rice list: {rice}")
+    logger.debug(f"Beans list: {beans}")
+    logger.debug(f"Toppings list: {toppings}")
 
     # Define add-ons
     addons = set(meats + rice + beans + toppings)
@@ -150,8 +211,7 @@ def fetch_menu_data():
     # Define main items: all menu items not in add-ons
     main_items = [name for name in menu.keys() if name not in addons]
 
-    if DEBUG:
-        print(f"[DEBUG] Main items: {main_items}")
+    logger.debug(f"Main items: {main_items}")
 
     return menu, meats, rice, beans, toppings, main_items
 
@@ -173,8 +233,8 @@ addon_categories = {
 
 # Initialize a single PhraseMatcher for add-ons
 addon_matcher = PhraseMatcher(nlp.vocab, attr="LOWER")
-for category, addons in addon_categories.items():
-    patterns = [nlp.make_doc(addon) for addon in addons]
+for category, addons_list in addon_categories.items():
+    patterns = [nlp.make_doc(addon) for addon in addons_list]
     addon_matcher.add(category.upper(), patterns)
 
 # Create addons list
@@ -188,7 +248,7 @@ field_prompts = {
 }
 
 bot_name = "Chipotle"
-print("Hi I am an automated Chipotle AI menu, what would you like to order! (type 'quit' to exit)")
+logger.info("Hi, I am an automated Chipotle AI menu. What would you like to order! (type 'quit' to exit)")
 
 # Function to get next order_id
 def get_next_order_id(session_id):
@@ -224,9 +284,9 @@ def extract_field_value(field, user_input):
 
     doc = nlp(user_input)
     if DEBUG:
-        print(f"[DEBUG] Field: {field}")
-        print(f"[DEBUG] Patterns: {[pattern.text for pattern in patterns]}")
-        print(f"[DEBUG] User Input: {user_input}")
+        logger.debug(f"Field: {field}")
+        logger.debug(f"Patterns: {[pattern.text for pattern in patterns]}")
+        logger.debug(f"User Input: {user_input}")
     matches = matcher(doc)
     if matches:
         # Collect all matching phrases
@@ -235,11 +295,11 @@ def extract_field_value(field, user_input):
             span = doc[start:end]
             values.add(span.text.lower())
         if DEBUG:
-            print(f"[DEBUG] Matches found: {values}")
+            logger.debug(f"Matches found: {values}")
         return list(values)
     else:
         if DEBUG:
-            print("[DEBUG] No matches found.")
+            logger.debug("No matches found.")
         return None
 
 # Function to extract menu items using PhraseMatcher
@@ -251,7 +311,7 @@ def extract_menu_items(user_input):
         span = doc[start:end]
         items.add(span.text.lower())
     if DEBUG:
-        print(f"[DEBUG] Extracted menu items: {items}")
+        logger.debug(f"Extracted menu items: {items}")
     return list(items)
 
 # Function to process order using SpaCy with improved association of add-ons
@@ -260,7 +320,7 @@ def process_order_spacy(session_id, input_sentence):
     segments = segment_input(input_sentence)
 
     if DEBUG:
-        print(f"[DEBUG] Segments: {segments}")
+        logger.debug(f"Segments: {segments}")
 
     # Initialize a dictionary to hold add-ons for each item
     item_addons = defaultdict(lambda: {"meats": [], "rice": [], "beans": [], "toppings": []})
@@ -288,8 +348,8 @@ def process_order_spacy(session_id, input_sentence):
                     item_addons[main_item][category_key].append(addon)
 
     if DEBUG:
-        print(f"[DEBUG] Items extracted: {items}")
-        print(f"[DEBUG] Item addons: {dict(item_addons)}")
+        logger.debug(f"Items extracted: {items}")
+        logger.debug(f"Item addons: {dict(item_addons)}")
 
     # Extract quantity (assuming total quantity applies to all items)
     quantity = 1
@@ -371,51 +431,52 @@ def process_order_spacy(session_id, input_sentence):
     else:
         return "Sorry, I didn't understand the items you want to order."
 
-# Function to update order
-def update_order(session_id, order_id, field, value):
-    if DEBUG:
-        order_before = db.get_db().Orders.find_one({"session_id": session_id, "order_id": order_id})
-        print(f"[DEBUG] Order before update: {order_before}")
-    result = db.get_db().Orders.update_one(
-        {"session_id": session_id, "order_id": order_id},
-        {"$set": {field: value}}
-    )
-    if DEBUG:
-        print(f"[DEBUG] Update result: matched {result.matched_count}, modified {result.modified_count}")
-    # Check if order is now complete
-    order = db.get_db().Orders.find_one({"session_id": session_id, "order_id": order_id})
-    if DEBUG:
-        print(f"[DEBUG] Updated order: {order}")
-    required_fields = ["meats", "rice", "beans", "toppings"]
-    if all(order.get(f) for f in required_fields):
-        db.get_db().Orders.update_one(
-            {"session_id": session_id, "order_id": order_id},
-            {"$set": {"completed": True}}
-        )
-    return f"Updated order {order_id} with {field}: {', '.join(value)}"
+# Unified Removal Function
+def handle_removal(session_id, session, sentence):
+    # Determine the removal method
+    removal_method = determine_removal_method(sentence)
 
-# Function to display current order
-def display_current_order(session_id):
-    orders = list(db.get_db().Orders.find({"session_id": session_id}))
-    if orders:
-        response_lines = [f"Here is your current order:"]
-        for order in orders:
-            category = order.get("category", "other")
-            if category == "entree":
-                meats = ', '.join(order['meats']) if order.get('meats') else 'None'
-                rice = ', '.join(order['rice']) if order.get('rice') else 'None'
-                beans = ', '.join(order['beans']) if order.get('beans') else 'None'
-                toppings = ', '.join(order['toppings']) if order.get('toppings') else 'None'
-                response_lines.append(
-                    f"Order ID: {order['order_id']}, Item: {order['item'].capitalize()}, "
-                    f"Meats: {meats}, Rice: {rice}, Beans: {beans}, Toppings: {toppings}"
-                )
+    if DEBUG:
+        logger.debug(f"Removal Method Determined: {removal_method}")
+
+    if removal_method == "reset_order":
+        # Prompt for confirmation
+        session["pending_action"] = {"action": "reset_order"}
+        return "Are you sure you want to reset your entire order? (yes/no)"
+
+    elif removal_method == "by_order_id":
+        order_ids = extract_order_ids(sentence)
+        if order_ids:
+            removed_items = remove_items_by_ids(session_id, order_ids)
+            if removed_items:
+                return f"I've removed the following items from your order: {', '.join(removed_items)}."
             else:
-                # For non-entrees, just display item
-                response_lines.append(f"Order ID: {order['order_id']}, Item: {order['item'].capitalize()}")
-        return '\n'.join(response_lines)
+                return "I couldn't find any items with the specified IDs."
+        else:
+            return "I couldn't detect any order IDs in your request."
+
     else:
-        return "Your order is currently empty."
+        # Default to removal by features/descriptions
+        features = extract_features(sentence)
+        if DEBUG:
+            logger.debug(f"Features extracted for removal: {features}")
+        removed_items = remove_items_by_features(session_id, features)
+        if removed_items:
+            return f"I've removed the following items from your order: {', '.join(removed_items)}."
+        else:
+            return "I couldn't find any items matching the specified features."
+
+# Function to determine removal method
+def determine_removal_method(sentence):
+    # Define keywords for each removal method
+    # Updated regex to include 'remove order \d+' patterns
+    if re.search(r'\b(reset|start over|clear my order|delete my order|restart my order|erase my order)\b', sentence, re.IGNORECASE):
+        return "reset_order"
+    elif re.search(r'\b(order id|item id|order number|delete \d+|remove(?: order)? \d+|cancel \d+)\b', sentence, re.IGNORECASE):
+        return "by_order_id"
+    else:
+        # Default to removal by features/descriptions
+        return "by_features"
 
 # Function to extract order IDs
 def extract_order_ids(input_sentence):
@@ -427,7 +488,15 @@ def extract_order_ids(input_sentence):
                 order_ids.append(int(ent.text))
             except ValueError:
                 order_ids.append(text2int(ent.text))
-    return order_ids
+    # Additionally, use regex to find standalone numbers
+    regex_ids = re.findall(r'\b\d+\b', input_sentence)
+    for rid in regex_ids:
+        try:
+            order_ids.append(int(rid))
+        except ValueError:
+            continue
+    # Remove duplicates
+    return list(set(order_ids))
 
 # Function to remove items by IDs
 def remove_items_by_ids(session_id, order_ids):
@@ -470,6 +539,9 @@ def extract_features(input_sentence):
         if topping.lower() in doc_text:
             features["toppings"].append(topping)
 
+    if DEBUG:
+        logger.debug(f"Features extracted: {features}")
+
     return features
 
 # Function to remove items by features
@@ -488,7 +560,13 @@ def remove_items_by_features(session_id, features):
     if features["toppings"]:
         query["toppings"] = {"$in": features["toppings"]}
 
+    if DEBUG:
+        logger.debug(f"Query for removal by features: {query}")
+
     orders_to_remove = list(db.get_db().Orders.find(query))
+
+    if DEBUG:
+        logger.debug(f"Orders to remove based on features: {orders_to_remove}")
 
     for order in orders_to_remove:
         removed_items.append(f"{order['item'].capitalize()} (Order ID {order['order_id']})")
@@ -503,10 +581,10 @@ def predict_intent(user_input):
 
     # Compute Cosine Similarity
     cosine_similarities = np.dot(pattern_embeddings, input_embedding) / (np.linalg.norm(pattern_embeddings, axis=1) * np.linalg.norm(input_embedding))
-    
+
     # Compute Euclidean Distance
     euclidean_distances = np.linalg.norm(pattern_embeddings - input_embedding, axis=1)
-    
+
     # Compute Jaccard Similarity
     input_tokens = set(cleaned_input.split())
     jaccard_similarities = np.array([
@@ -514,7 +592,7 @@ def predict_intent(user_input):
         if len(input_tokens.union(set(pattern.split()))) > 0 else 0 
         for pattern in all_patterns
     ])
-    
+
     # Normalize Euclidean Distances and Jaccard Similarities
     scaler_euclidean = MinMaxScaler()
     normalized_euclidean = scaler_euclidean.fit_transform(euclidean_distances.reshape(-1, 1)).flatten()
@@ -531,12 +609,7 @@ def predict_intent(user_input):
     predicted_tag = pattern_tags[max_score_index]
 
     if DEBUG:
-        #print(f"[DEBUG] Cosine Similarities: {cosine_similarities}")
-        #print(f"[DEBUG] Euclidean Distances: {euclidean_distances}")
-        #print(f"[DEBUG] Normalized Euclidean: {normalized_euclidean}")
-        #print(f"[DEBUG] Jaccard Similarities: {jaccard_similarities}")
-        #print(f"[DEBUG] Combined Scores: {combined_scores}")
-        print(f"[DEBUG] Max combined score: {max_score}, Predicted intent: {predicted_tag}")
+        logger.debug(f"Max combined score: {max_score}, Predicted intent: {predicted_tag}")
 
     # Determine intent based on combined score thresholds
     if max_score >= SIMILARITY_THRESHOLD_HIGH:
@@ -551,11 +624,14 @@ def predict_intent(user_input):
 
 # Function to check missing fields and set slot-filling context
 def check_missing_fields(session):
+    if session.get("pending_action"):
+        return None  # Skip slot-filling if a critical action is pending
+
     session_id = session['session_id']
     # Only consider orders for this session that are not completed
     orders = list(db.get_db().Orders.find({"session_id": session_id, "completed": False}))
     if DEBUG:
-        print(f"[DEBUG] Orders with missing fields: {orders}")
+        logger.debug(f"Orders with missing fields: {orders}")
     for order in orders:
         category = order.get("category", "other")
         if category == "entree":
@@ -563,7 +639,7 @@ def check_missing_fields(session):
             for field in ["meats", "rice", "beans", "toppings"]:
                 if not order.get(field):  # Checks if the list is empty or missing
                     if DEBUG:
-                        print(f"[DEBUG] Missing field '{field}' in order: {order}")
+                        logger.debug(f"Missing field '{field}' in order: {order}")
                     session["missing_field_context"]["order_id"] = order["order_id"]
                     session["missing_field_context"]["field"] = field
                     session["is_fixing"] = True
@@ -582,51 +658,22 @@ def check_missing_fields(session):
 def process_order(session_id, session, sentence):
     response = process_order_spacy(session_id, sentence)
     session['chat_length'] += 1
-    responses = [response]
-    missing_fields_response = check_missing_fields(session)
-    if missing_fields_response:
-        responses.append(missing_fields_response)
-    else:
-        responses.append("Anything else I can help with?")
-    return "\n".join(responses)
-
-def remove_order_by_id(session_id, session, sentence):
-    order_ids = extract_order_ids(sentence)
-    responses = []
-    if order_ids:
-        removed_items = remove_items_by_ids(session_id, order_ids)
-        if removed_items:
-            responses.append(f"I've removed the following items from your order: {', '.join(removed_items)}.")
-        else:
-            responses.append("I couldn't find any items with the specified IDs.")
-    else:
-        responses.append("I couldn't detect any order IDs in your request.")
-    return "\n".join(responses)
-
-def remove_order_by_description(session_id, session, sentence):
-    features = extract_features(sentence)
-    removed_items = remove_items_by_features(session_id, features)
-    if removed_items:
-        response = f"I've removed the following items from your order: {', '.join(removed_items)}."
-    else:
-        response = "I couldn't find any items matching the specified features."
     return response
 
-def modify_order(session_id, session, sentence):
+def modify_order_handler(session_id, session, sentence):
     return "Sure, what would you like to modify in your order?"
 
 def checkout_order(session_id, session, sentence):
     # Delete the session's orders
     db.get_db().Orders.delete_many({"session_id": session_id})
     if DEBUG:
-        print(f"[DEBUG] Orders for session {session_id} have been deleted upon checkout.")
-    response = "Your order is complete and has been submitted. Thank you!"
+        logger.debug(f"Orders for session {session_id} have been deleted upon checkout.")
     # Reset session data
     session['is_fixing'] = False
     session['missing_field_context'] = {}
     session['chat_length'] = 0
-    session['last_activity'] = datetime.now(timezone.utc)  # Fixed datetime.utcnow() to timezone-aware
-    return response
+    session['last_activity'] = datetime.now(timezone.utc)
+    return "Your order is complete and has been submitted. Thank you!"
 
 def check_order(session_id, session, sentence):
     return display_current_order(session_id)
@@ -634,12 +681,12 @@ def check_order(session_id, session, sentence):
 def restart_order(session_id, session, sentence):
     db.get_db().Orders.delete_many({"session_id": session_id})
     if DEBUG:
-        print(f"[DEBUG] Orders for session {session_id} have been reset by user request.")
+        logger.debug(f"Orders for session {session_id} have been reset by user request.")
     # Reset session data but keep the same session_id
     session['is_fixing'] = False
     session['missing_field_context'] = {}
     session['chat_length'] = 0
-    session['last_activity'] = datetime.now(timezone.utc)  # Fixed datetime.utcnow() to timezone-aware
+    session['last_activity'] = datetime.now(timezone.utc)
     return "Your order has been reset. You can start a new order."
 
 def check_menu(session_id, session, sentence):
@@ -668,31 +715,81 @@ def provide_options(session_id, session, sentence):
     else:
         return "You can order burritos, bowls, tacos, salads, and more."
 
+# Function to handle confirmation of critical actions
 def handle_confirm(session_id, session, sentence):
-    return "Great! Let's continue with your order."
+    if session.get("pending_action") and session["pending_action"].get("action") == "reset_order":
+        # Proceed with resetting the order
+        db.get_db().Orders.delete_many({"session_id": session_id})
+        if DEBUG:
+            logger.debug(f"Orders for session {session_id} have been reset upon user confirmation.")
+        # Reset session data
+        session['is_fixing'] = False
+        session['missing_field_context'] = {}
+        session['chat_length'] = 0
+        session['last_activity'] = datetime.now(timezone.utc)
+        # Clear pending action
+        session.pop("pending_action", None)
+        return "Your order has been reset. You can start a new order."
+    else:
+        return "Great! Let's continue with your order."
 
+# Function to handle denial of critical actions
 def handle_deny(session_id, session, sentence):
-    return "Okay, let's clarify your request. What would you like to do?"
+    if session.get("pending_action") and session["pending_action"].get("action") == "reset_order":
+        # Cancel the reset action
+        session.pop("pending_action", None)
+        return "Alright, your order remains unchanged."
+    else:
+        return "Okay, let's clarify your request. What would you like to do?"
 
 # Mapping of intent tags to handler functions
 intent_handlers = {
-    "goodbye": lambda sid, s, sen: random.choice(intents['intents'][1]['responses']),
+    "goodbye": lambda sid, s, sen: random.choice(intents_dict['goodbye']['responses']),
     "order": process_order,
-    "remove_item": remove_order_by_description,
-    "modify_order": modify_order,
+    "remove_order": handle_removal,
+    "modify_order": modify_order_handler,
+    "reset_order": handle_removal,
     "checkout": checkout_order,
     "check_order": check_order,
-    "restart_order": restart_order,
+    "restart_order": handle_removal,
     "show_menu": check_menu,
     "ask_options": provide_options,
     "confirm": handle_confirm,
     "deny": handle_deny,
-    "vegan_options": lambda sid, s, sen: random.choice(intents['intents'][14]['responses']),
-    "fallback": lambda sid, s, sen: random.choice(intents['intents'][-1]['responses'])
+    "vegan_options": lambda sid, s, sen: random.choice(intents_dict['vegan_options']['responses']),
+    "fallback": lambda sid, s, sen: random.choice(intents_dict['fallback']['responses'])
 }
 
 # Define the inactivity timeout
 INACTIVITY_TIMEOUT = timedelta(minutes=5)
+
+# Function to display current order
+def display_current_order(session_id):
+    orders = list(db.get_db().Orders.find({"session_id": session_id}))
+    if orders:
+        response_lines = [f"Here is your current order:"]
+        for order in orders:
+            category = order.get("category", "other")
+            if category == "entree":
+                meats = ', '.join(order['meats']) if order.get('meats') else 'None'
+                rice = ', '.join(order['rice']) if order.get('rice') else 'None'
+                beans = ', '.join(order['beans']) if order.get('beans') else 'None'
+                toppings = ', '.join(order['toppings']) if order.get('toppings') else 'None'
+                response_lines.append(
+                    f"Order ID: {order['order_id']}, Item: {order['item'].capitalize()}, "
+                    f"Meats: {meats}, Rice: {rice}, Beans: {beans}, Toppings: {toppings}"
+                )
+            else:
+                # For non-entrees, just display item
+                response_lines.append(f"Order ID: {order['order_id']}, Item: {order['item'].capitalize()}")
+        return '\n'.join(response_lines)
+    else:
+        return "Your order is currently empty."
+
+# Function to update session data
+def update_session(sessions_collection, session, session_id):
+    session['last_activity'] = datetime.now(timezone.utc)
+    sessions_collection.replace_one({'session_id': session_id}, session, upsert=True)
 
 @app.route('/get_order', methods=['GET'])
 def get_order():
@@ -705,7 +802,7 @@ def get_order():
     for order in order_details:
         order['_id'] = str(order['_id'])
     if DEBUG:
-        print(order_details)
+        logger.debug(order_details)
     return jsonify({"order_details": order_details})
 
 @app.route('/chat', methods=['POST', 'OPTIONS'])
@@ -713,21 +810,13 @@ def chat():
     if request.method == 'OPTIONS':
         return _build_cors_preflight_response()
     
-    if request.method == "OPTIONS":
-        # Explicitly handle OPTIONS to respond with appropriate CORS headers
-        response = jsonify({"status": "preflight OK"})
-        response.headers.add("Access-Control-Allow-Origin", "http://localhost:5001")
-        response.headers.add("Access-Control-Allow-Credentials", "true")
-        response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
-        response.headers.add("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
-        return response, 200
     try:
         data = request.json
         if not data or 'message' not in data:
             return jsonify({"response": "No message provided"}), 400
 
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+        logger.exception("An unexpected error occurred.")
         return jsonify({"response": "An internal error occurred. Please try again later."}), 500
 
     sentence = data.get("message")
@@ -749,7 +838,7 @@ def chat():
                 # Session has been inactive for more than 5 minutes
                 db_instance.Orders.delete_many({'session_id': session_id})
                 if DEBUG:
-                    print(f"[DEBUG] Session {session_id} has been inactive for over 5 minutes. Orders deleted.")
+                    logger.debug(f"Session {session_id} has been inactive for over 5 minutes. Orders deleted.")
                 # Reset session data
                 session = {
                     'session_id': session_id,
@@ -765,9 +854,9 @@ def chat():
                     {'session_id': session_id},
                     {'$set': {'last_activity': datetime.now(timezone.utc)}}
                 )
-                session['last_activity'] = datetime.now(timezone.utc)  # Changed from datetime.utcnow()
+                session['last_activity'] = datetime.now(timezone.utc)
                 if DEBUG:
-                    print(f"[DEBUG] Existing session found with session_id: {session_id}")
+                    logger.debug(f"Existing session found with session_id: {session_id}")
         else:
             # Session data not found in database, create new session
             session = {
@@ -779,7 +868,7 @@ def chat():
             }
             sessions_collection.insert_one(session)
             if DEBUG:
-                print(f"[DEBUG] Session data not found, created new session with session_id: {session_id}")
+                logger.debug(f"Session data not found, created new session with session_id: {session_id}")
     else:
         # No session_id provided, create new session
         session_id = str(uuid.uuid4())
@@ -792,7 +881,7 @@ def chat():
         }
         sessions_collection.insert_one(session)
         if DEBUG:
-            print(f"[DEBUG] New session created with session_id: {session_id}")
+            logger.debug(f"New session created with session_id: {session_id}")
 
     is_fixing = session.get("is_fixing", False)
     missing_field_context = session.get("missing_field_context", {})
@@ -801,8 +890,8 @@ def chat():
     cleaned_sentence = clean_sentence(sentence)
 
     if DEBUG:
-        print(f"[DEBUG] Session ID: {session_id}")
-        print(f"[DEBUG] Cleaned sentence: {cleaned_sentence}")
+        logger.debug(f"Session ID: {session_id}")
+        logger.debug(f"Cleaned sentence: {cleaned_sentence}")
 
     responses = []
 
@@ -810,12 +899,29 @@ def chat():
     predicted_tag, confidence = predict_intent(sentence)
 
     if DEBUG:
-        print(f"[DEBUG] Predicted intent: {predicted_tag}, Confidence: {confidence}")
+        logger.debug(f"Predicted intent: {predicted_tag}, Confidence: {confidence}")
 
-    # Handle interrupt intents first
-    interrupt_intents = ["remove_item", "modify_order", "restart_order", "show_menu", "check_order", "ask_options"]  # Define all interrupt tags
+    # Define interrupt and confirmation intents
+    confirmation_intents = ["confirm", "deny"]
+    interrupt_intents = ["remove_order", "modify_order", "restart_order", "show_menu", "check_order", "ask_options", "reset_order"]
 
-    if predicted_tag in interrupt_intents and confidence != "low":
+    # Handle confirmation intents if a pending action exists
+    if session.get("pending_action") and predicted_tag in confirmation_intents and confidence != "low":
+        if predicted_tag == "confirm":
+            response = intent_handlers["confirm"](session_id, session, sentence)
+            responses.append(response)
+        elif predicted_tag == "deny":
+            response = intent_handlers["deny"](session_id, session, sentence)
+            responses.append(response)
+        
+        # After handling confirmation, check if there are missing fields
+        missing_fields_response = check_missing_fields(session)
+        if missing_fields_response:
+            responses.append(missing_fields_response)
+        else:
+            responses.append("Anything else I can help with?")
+
+    elif predicted_tag in interrupt_intents and confidence != "low":
         # Handle interrupt intents immediately
         handler_function = intent_handlers.get(predicted_tag, intent_handlers["fallback"])
         response = handler_function(session_id, session, sentence)
@@ -825,6 +931,7 @@ def chat():
         missing_fields_response = check_missing_fields(session)
         if missing_fields_response:
             responses.append(missing_fields_response)
+
     elif is_fixing and confidence != "low":
         # Handle slot filling
         order_id_fix = missing_field_context.get("order_id")
@@ -840,7 +947,7 @@ def chat():
             value = extract_field_value(field, cleaned_sentence)
 
             if DEBUG:
-                print(f"[DEBUG] Extracted value: {value}")
+                logger.debug(f"Extracted value: {value}")
 
             if value:
                 update_msg = update_order(session_id, order_id_fix, field, value)
@@ -853,6 +960,7 @@ def chat():
                     responses.append("Anything else I can help with?")
             else:
                 responses.append(f"Sorry, I didn't understand what you're saying. {field_prompts[field]}")
+
     else:
         # Handle other intents
         if predicted_tag in intent_handlers and confidence != "low":
@@ -861,9 +969,12 @@ def chat():
             response = handler_function(session_id, session, sentence)
             responses.append(response)
 
-            # Update is_fixing from session in case it was modified
-            is_fixing = session.get("is_fixing", False)
-            missing_field_context = session.get("missing_field_context", {})
+            # After handling, check if there are missing fields
+            missing_fields_response = check_missing_fields(session)
+            if missing_fields_response:
+                responses.append(missing_fields_response)
+            else:
+                responses.append("Anything else I can help with?")
         elif confidence == "medium":
             # Moderate confidence: ask for confirmation
             responses.append(f"I think you want to {predicted_tag.replace('_', ' ')}. Is that correct?")
@@ -874,10 +985,10 @@ def chat():
             responses.append("I do not understand...")
 
     # Update session data
-    session['last_activity'] = datetime.now(timezone.utc)  # Changed from datetime.utcnow()
-    sessions_collection.replace_one({'session_id': session_id}, session, upsert=True)
+    update_session(sessions_collection, session, session_id)
 
     return jsonify({"response": "\n".join(responses), "session_id": session_id})
+
 def _build_cors_preflight_response():
     response = jsonify({'status': 'OK'})
     response.headers.add("Access-Control-Allow-Origin", "http://localhost:5001")
@@ -889,6 +1000,7 @@ def _build_cors_preflight_response():
 def _corsify_actual_response(response):
     response.headers.add("Access-Control-Allow-Origin", "http://localhost:5001")
     response.headers.add('Access-Control-Allow-Credentials', 'true')
+
 # Serve React frontend
 @app.route('/')
 def home():
