@@ -20,6 +20,9 @@ import sys
 # Import the database connection
 from connect import database as db  # Ensure connect.py is correctly set up with get_db()
 
+# Import the MenuFuzzer
+from fuzzer import MenuFuzzer  # Ensure fuzzer.py is in the same directory or in Python path
+
 app = Flask(__name__, static_folder='frontend/build')  # Set static_folder to frontend/build
 CORS(app, resources={r"/*": {"origins": ["http://localhost:5001"]}}, supports_credentials=True)
 #CORS(app, resources={r"/*": {"origins": ["https://chipotleaimenu.app"]}}, supports_credentials=True)
@@ -217,6 +220,9 @@ def fetch_menu_data():
 
 # Initial fetch of menu data
 menu, meats, rice, beans, toppings, main_items = fetch_menu_data()
+
+# Initialize the MenuFuzzer with menu data
+fuzzer = MenuFuzzer(menu_items=main_items, meats=meats, rice=rice, beans=beans, toppings=toppings, debug=DEBUG)
 
 # Initialize PhraseMatcher for main menu items only
 menu_matcher = PhraseMatcher(nlp.vocab, attr="LOWER")
@@ -887,16 +893,24 @@ def chat():
     missing_field_context = session.get("missing_field_context", {})
     chat_length = session.get("chat_length", 0)
 
-    cleaned_sentence = clean_sentence(sentence)
+    # Apply fuzzing to correct minor typos
+    corrected_sentence, corrections = fuzzer.correct_text(sentence)
+
+    if DEBUG and corrections:
+        logger.debug(f"Fuzzing corrections: {corrections}")
+
+    cleaned_sentence = clean_sentence(corrected_sentence)
 
     if DEBUG:
         logger.debug(f"Session ID: {session_id}")
+        logger.debug(f"Original sentence: {sentence}")
+        logger.debug(f"Corrected sentence: {corrected_sentence}")
         logger.debug(f"Cleaned sentence: {cleaned_sentence}")
 
     responses = []
 
     # Predict intent
-    predicted_tag, confidence = predict_intent(sentence)
+    predicted_tag, confidence = predict_intent(sentence)  # Consider using corrected_sentence if appropriate
 
     if DEBUG:
         logger.debug(f"Predicted intent: {predicted_tag}, Confidence: {confidence}")
@@ -1000,6 +1014,7 @@ def _build_cors_preflight_response():
 def _corsify_actual_response(response):
     response.headers.add("Access-Control-Allow-Origin", "http://localhost:5001")
     response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
 
 # Serve React frontend
 @app.route('/')

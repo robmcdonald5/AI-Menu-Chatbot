@@ -8,6 +8,7 @@
 !chat.py
 !connect.py
 !database.py
+!fuzzer.py
 !intents.json
 !Dockerfile
 !heroku.yml
