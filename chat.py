@@ -909,44 +909,7 @@ def chat():
 
     responses = []
 
-    # Predict intent
-    predicted_tag, confidence = predict_intent(sentence)  # Consider using corrected_sentence if appropriate
-
-    if DEBUG:
-        logger.debug(f"Predicted intent: {predicted_tag}, Confidence: {confidence}")
-
-    # Define interrupt and confirmation intents
-    confirmation_intents = ["confirm", "deny"]
-    interrupt_intents = ["remove_order", "modify_order", "restart_order", "show_menu", "check_order", "ask_options", "reset_order"]
-
-    # Handle confirmation intents if a pending action exists
-    if session.get("pending_action") and predicted_tag in confirmation_intents and confidence != "low":
-        if predicted_tag == "confirm":
-            response = intent_handlers["confirm"](session_id, session, sentence)
-            responses.append(response)
-        elif predicted_tag == "deny":
-            response = intent_handlers["deny"](session_id, session, sentence)
-            responses.append(response)
-        
-        # After handling confirmation, check if there are missing fields
-        missing_fields_response = check_missing_fields(session)
-        if missing_fields_response:
-            responses.append(missing_fields_response)
-        else:
-            responses.append("Anything else I can help with?")
-
-    elif predicted_tag in interrupt_intents and confidence != "low":
-        # Handle interrupt intents immediately
-        handler_function = intent_handlers.get(predicted_tag, intent_handlers["fallback"])
-        response = handler_function(session_id, session, sentence)
-        responses.append(response)
-        
-        # After handling interrupt, check if there are missing fields
-        missing_fields_response = check_missing_fields(session)
-        if missing_fields_response:
-            responses.append(missing_fields_response)
-
-    elif is_fixing and confidence != "low":
+    if is_fixing:
         # Handle slot filling
         order_id_fix = missing_field_context.get("order_id")
         field = missing_field_context.get("field")
@@ -973,11 +936,79 @@ def chat():
                 else:
                     responses.append("Anything else I can help with?")
             else:
-                responses.append(f"Sorry, I didn't understand what you're saying. {field_prompts[field]}")
+                # If unable to extract value, perhaps we can predict intent to check for confirmation or interruption
+                # Predict intent
+                predicted_tag, confidence = predict_intent(sentence)
 
+                if predicted_tag in ["confirm", "deny"] and confidence != "low":
+                    # Handle confirmation or denial
+                    if predicted_tag == "confirm":
+                        response = intent_handlers["confirm"](session_id, session, sentence)
+                        responses.append(response)
+                    elif predicted_tag == "deny":
+                        response = intent_handlers["deny"](session_id, session, sentence)
+                        responses.append(response)
+                    # After handling, check if there are missing fields
+                    missing_fields_response = check_missing_fields(session)
+                    if missing_fields_response:
+                        responses.append(missing_fields_response)
+                    else:
+                        responses.append("Anything else I can help with?")
+                elif predicted_tag in ["remove_order", "modify_order", "restart_order", "show_menu", "check_order", "ask_options", "reset_order"] and confidence != "low":
+                    # Handle interrupt intents
+                    handler_function = intent_handlers.get(predicted_tag, intent_handlers["fallback"])
+                    response = handler_function(session_id, session, sentence)
+                    responses.append(response)
+                    # After handling, check if there are missing fields
+                    missing_fields_response = check_missing_fields(session)
+                    if missing_fields_response:
+                        responses.append(missing_fields_response)
+                    else:
+                        responses.append("Anything else I can help with?")
+                else:
+                    # Unable to extract value and no valid intent
+                    responses.append(f"Sorry, I didn't understand what you're saying. {field_prompts[field]}")
     else:
-        # Handle other intents
-        if predicted_tag in intent_handlers and confidence != "low":
+        # Predict intent
+        predicted_tag, confidence = predict_intent(sentence)
+
+        if DEBUG:
+            logger.debug(f"Predicted intent: {predicted_tag}, Confidence: {confidence}")
+
+        # Define interrupt and confirmation intents
+        confirmation_intents = ["confirm", "deny"]
+        interrupt_intents = ["remove_order", "modify_order", "restart_order", "show_menu", "check_order", "ask_options", "reset_order"]
+
+        # Handle confirmation intents if a pending action exists
+        if session.get("pending_action") and predicted_tag in confirmation_intents and confidence != "low":
+            if predicted_tag == "confirm":
+                response = intent_handlers["confirm"](session_id, session, sentence)
+                responses.append(response)
+            elif predicted_tag == "deny":
+                response = intent_handlers["deny"](session_id, session, sentence)
+                responses.append(response)
+            
+            # After handling confirmation, check if there are missing fields
+            missing_fields_response = check_missing_fields(session)
+            if missing_fields_response:
+                responses.append(missing_fields_response)
+            else:
+                responses.append("Anything else I can help with?")
+
+        elif predicted_tag in interrupt_intents and confidence != "low":
+            # Handle interrupt intents immediately
+            handler_function = intent_handlers.get(predicted_tag, intent_handlers["fallback"])
+            response = handler_function(session_id, session, sentence)
+            responses.append(response)
+            
+            # After handling interrupt, check if there are missing fields
+            missing_fields_response = check_missing_fields(session)
+            if missing_fields_response:
+                responses.append(missing_fields_response)
+            else:
+                responses.append("Anything else I can help with?")
+
+        elif predicted_tag in intent_handlers and confidence != "low":
             handler_function = intent_handlers[predicted_tag]
             # Call the handler function
             response = handler_function(session_id, session, sentence)
