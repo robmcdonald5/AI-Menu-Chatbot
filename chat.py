@@ -17,6 +17,9 @@ import logging
 from logging.handlers import RotatingFileHandler
 import sys
 
+# Import the configuration
+import config
+
 # Import the database connection
 from connect import database as db  # Ensure connect.py is correctly set up with get_db()
 
@@ -24,59 +27,66 @@ from connect import database as db  # Ensure connect.py is correctly set up with
 from fuzzer import MenuFuzzer  # Ensure fuzzer.py is in the same directory or in Python path
 
 app = Flask(__name__, static_folder='frontend/build')  # Set static_folder to frontend/build
-CORS(app, resources={r"/*": {"origins": ["http://localhost:5001"]}}, supports_credentials=True)
-#CORS(app, resources={r"/*": {"origins": ["https://chipotleaimenu.app"]}}, supports_credentials=True)
+
+# Updated CORS setup using config.py
+CORS(app, resources={r"/*": {"origins": config.CORS_ORIGINS}}, supports_credentials=True)
+
+# Updated DEBUG flag using config.py
+DEBUG = config.DEBUG
 
 ## Logging Configuration ##
 
-# Toggleable debug mode
-DEBUG = True  # Set to False in production
-
 # Create the root logger
 root_logger = logging.getLogger()
-root_logger.setLevel(logging.INFO)  # Default to INFO to reduce verbosity
+root_logger.setLevel(config.ROOT_LOG_LEVEL)  # Default to INFO to reduce verbosity
 
 # Create formatter
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter(config.LOG_FORMAT)
 
 # Create and configure console handler
 console_handler = logging.StreamHandler(sys.stdout)
-console_handler.setLevel(logging.INFO)  # Console shows INFO and above
+console_handler.setLevel(config.CONSOLE_LOG_LEVEL)  # Console shows INFO and above
 console_handler.setFormatter(formatter)
 root_logger.addHandler(console_handler)
 
 # Create and configure rotating file handler
-file_handler = RotatingFileHandler("chatbot.log", maxBytes=5*1024*1024, backupCount=5)  # 5MB per file, keep last 5
-file_handler.setLevel(logging.DEBUG if DEBUG else logging.INFO)  # File logs DEBUG if DEBUG=True
+file_handler = RotatingFileHandler(
+    config.LOG_FILE,
+    maxBytes=config.LOG_MAX_BYTES,
+    backupCount=config.LOG_BACKUP_COUNT
+)
+file_handler.setLevel(config.FILE_LOG_LEVEL)  # File logs DEBUG if DEBUG=True
 file_handler.setFormatter(formatter)
 root_logger.addHandler(file_handler)
 
 # Suppress verbose logs from external libraries
-logging.getLogger('pymongo').setLevel(logging.WARNING)
-logging.getLogger('urllib3').setLevel(logging.WARNING)
-logging.getLogger('sentence_transformers').setLevel(logging.WARNING)
-logging.getLogger('spacy').setLevel(logging.WARNING)
-logging.getLogger('werkzeug').setLevel(logging.WARNING)  # Flask's built-in server
-# Add any other external libraries as needed
+for logger_name in config.EXTERNAL_LOGGERS:
+    logging.getLogger(logger_name).setLevel(logging.WARNING)
 
 # Create a logger for your application
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG if DEBUG else logging.INFO)  # Application logger
+logger.setLevel(config.FILE_LOG_LEVEL)  # Application logger
 
 ## End of Logging Configuration ##
 
-# Load SpaCy model and Sentence-BERT model
-nlp = spacy.load('en_core_web_sm')
-sentence_model = SentenceTransformer('all-mpnet-base-v2')
+# Load SpaCy model and Sentence-BERT model using config.py
+nlp = spacy.load(config.SPACY_MODEL)
+sentence_model = SentenceTransformer(config.SENTENCE_MODEL)
 
-# Define similarity thresholds
-SIMILARITY_THRESHOLD_HIGH = 0.7  # High confidence
-SIMILARITY_THRESHOLD_MEDIUM = 0.45  # Medium confidence
+# Define similarity thresholds and weights using config.py
+SIMILARITY_THRESHOLD_HIGH = config.SIMILARITY_THRESHOLD_HIGH
+SIMILARITY_THRESHOLD_MEDIUM = config.SIMILARITY_THRESHOLD_MEDIUM
 
-# Define weights for similarity metrics
-WEIGHT_COSINE = 0.5
-WEIGHT_EUCLIDEAN = 0.3
-WEIGHT_JACCARD = 0.2
+WEIGHT_COSINE = config.WEIGHT_COSINE
+WEIGHT_EUCLIDEAN = config.WEIGHT_EUCLIDEAN
+WEIGHT_JACCARD = config.WEIGHT_JACCARD
+
+# Define field prompts using config.py
+field_prompts = config.FIELD_PROMPTS
+
+bot_name = config.BOT_NAME
+
+logger.info(f"Hi, I am an automated {config.BOT_NAME} AI menu. What would you like to order! (type 'quit' to exit)")
 
 # Function to clean sentences
 def clean_sentence(sentence):
@@ -84,8 +94,8 @@ def clean_sentence(sentence):
     sentence = re.sub(r'[^\w\s]', '', sentence)
     return sentence
 
-# Load intents from intents.json
-with open('intents.json', 'r') as f:
+# Load intents using config.py
+with open(config.INTENTS_FILE, 'r') as f:
     intents = json.load(f)
 
 # Create a dictionary mapping tags to their respective intents for easier access
@@ -251,15 +261,16 @@ for category, addons_list in addon_categories.items():
 # Create addons list
 addons_list = meats + rice + beans + toppings
 
-field_prompts = {
-    "meats": "What kind of meat would you like?",
-    "rice": "What type of rice would you like?",
-    "beans": "Would you like black beans, pinto beans, or none?",
-    "toppings": "What toppings would you like?"
-}
+# Define weights as per similarity metrics
+# Already defined earlier using config.py
 
-bot_name = "Chipotle"
-logger.info("Hi, I am an automated Chipotle AI menu. What would you like to order! (type 'quit' to exit)")
+# Define field prompts as per config.py
+field_prompts = config.FIELD_PROMPTS
+
+bot_name = config.BOT_NAME
+
+# Initialize the logger
+logger.info(f"Hi, I am an automated {config.BOT_NAME} AI menu. What would you like to order! (type 'quit' to exit)")
 
 # Function to get next order_id
 def get_next_order_id(session_id):
@@ -928,8 +939,8 @@ intent_handlers = {
     "fallback": lambda sid, s, sen: random.choice(intents_dict['fallback']['responses'])
 }
 
-# Define the inactivity timeout
-INACTIVITY_TIMEOUT = timedelta(minutes=5)
+# Define the inactivity timeout using config.py
+INACTIVITY_TIMEOUT = timedelta(minutes=config.INACTIVITY_TIMEOUT_MINUTES)
 
 # Function to display current order
 def display_current_order(session_id):
@@ -999,19 +1010,20 @@ def chat():
         if session:
             # Existing session
             last_activity = session.get('last_activity', datetime.now(timezone.utc))
-            if last_activity.tzinfo is None:  # Make datetime timezone-aware if it's naive
+            if last_activity.tzinfo is None:
                 last_activity = last_activity.replace(tzinfo=timezone.utc)
 
             if datetime.now(timezone.utc) - last_activity > INACTIVITY_TIMEOUT:
-                # Session has been inactive for more than 5 minutes
+                # Session has been inactive for more than the timeout
                 db_instance.Orders.delete_many({'session_id': session_id})
                 if DEBUG:
-                    logger.debug(f"Session {session_id} has been inactive for over 5 minutes. Orders deleted.")
+                    logger.debug(f"Session {session_id} has been inactive for over {INACTIVITY_TIMEOUT}. Orders deleted.")
                 # Reset session data
                 session = {
                     'session_id': session_id,
                     'is_fixing': False,
                     'missing_field_context': {},
+                    'pending_action': None,
                     'chat_length': 0,
                     'last_activity': datetime.now(timezone.utc)
                 }
@@ -1031,6 +1043,7 @@ def chat():
                 'session_id': session_id,
                 'is_fixing': False,
                 'missing_field_context': {},
+                'pending_action': None,
                 'chat_length': 0,
                 'last_activity': datetime.now(timezone.utc)
             }
@@ -1044,6 +1057,7 @@ def chat():
             'session_id': session_id,
             'is_fixing': False,
             'missing_field_context': {},
+            'pending_action': None,
             'chat_length': 0,
             'last_activity': datetime.now(timezone.utc)
         }
@@ -1071,63 +1085,124 @@ def chat():
 
     responses = []
 
-    ## Enhanced Pending Actions Handling ##
-    pending_action = session.get("pending_action")
-    if pending_action and pending_action.get("action") == "modify_order":
-        missing_fields = pending_action.get("missing_fields", [])
-        data = pending_action.get("data", {})
-        # Initialize data if not present
-        order_ids = data.get('order_ids', [])
-        modifications = data.get('modifications', {})
+    # Define interrupt intents
+    interrupt_intents = ["remove_order", "modify_order", "restart_order", "show_menu", "check_order", "ask_options", "reset_order"]
 
-        # Iterate through missing fields and prompt for each
-        for field in missing_fields.copy():  # Use copy to allow removal during iteration
-            if field == 'order_id' and not order_ids:
-                # Attempt to extract Order ID from user input
-                extracted_order_ids = extract_order_ids(sentence)
-                if extracted_order_ids:
-                    order_ids.extend(extracted_order_ids)
-                    data['order_ids'] = order_ids
-                    missing_fields.remove('order_id')
-                    responses.append(f"Got Order ID(s): {', '.join(map(str, extracted_order_ids))}.")
-                else:
-                    responses.append("I'm sorry, I didn't catch the Order ID. Please provide the Order ID you'd like to modify.")
-                    break  # Wait for the correct input
-            elif field == 'modifications' and not modifications:
-                # Attempt to extract modifications from user input
-                extracted_modifications = extract_modifications(sentence)
-                if extracted_modifications:
-                    modifications.update(extracted_modifications)
-                    data['modifications'] = modifications
-                    missing_fields.remove('modifications')
-                    mod_desc = ', '.join([f"{k}: {', '.join(v)}" for k, v in extracted_modifications.items()])
-                    responses.append(f"Got modifications: {mod_desc}.")
-                else:
-                    responses.append("What modifications would you like to make to your order?")
-                    break  # Wait for the correct input
-
-        # Update the pending_action data
-        session['pending_action']['data'] = data
-        session['pending_action']['missing_fields'] = missing_fields
-
-        if not missing_fields:
-            # All required information is gathered, proceed to modify the order
-            response = modify_order_handler(session_id, session, sentence)
-            responses.append(response)
-            # Clear the pending_action
-            session.pop("pending_action", None)
+    # Function to check if the user's input is an interrupt
+    def is_interrupt(sentence):
+        predicted_tag, confidence = predict_intent(sentence)
+        if predicted_tag in interrupt_intents and confidence != "low":
+            return predicted_tag
         else:
-            # Still missing some fields, continue prompting
-            pass  # Responses already contain the prompts
+            return None
 
-        # Update session data and return the response
-        update_session(sessions_collection, session, session_id)
-        return jsonify({"response": "\n".join(responses), "session_id": session_id})
-    ## End of Enhanced Pending Actions Handling ##
+    # Get pending action
+    pending_action = session.get("pending_action")
 
-    # Check for slot-filling if not handling modify_order pending action
+    # Handle pending actions that should not accept interrupts
+    if pending_action and pending_action.get("action") in ["modify_order", "reset_order"]:
+        # Do not accept interrupts during these pending actions
+        # Suspend slot-filling
+        session['is_fixing'] = False
+
+        # Handle the pending action
+        if pending_action['action'] == 'modify_order':
+            # Handle modify_order pending action
+            # Extract order IDs and modifications from the user's input
+            order_ids = pending_action['data'].get('order_ids', [])
+            modifications = pending_action['data'].get('modifications', {})
+
+            # Extract missing fields
+            missing_fields = pending_action.get('missing_fields', [])
+
+            # Proceed with handling the pending action
+            # Iterate through missing fields and prompt for each
+            for field in missing_fields.copy():
+                if field == 'order_id' and not order_ids:
+                    # Attempt to extract Order ID from user input
+                    extracted_order_ids = extract_order_ids(sentence)
+                    if extracted_order_ids:
+                        order_ids.extend(extracted_order_ids)
+                        pending_action['data']['order_ids'] = order_ids
+                        missing_fields.remove('order_id')
+                        responses.append(f"Got Order ID(s): {', '.join(map(str, extracted_order_ids))}.")
+                    else:
+                        responses.append("I'm sorry, I didn't catch the Order ID. Please provide the Order ID you'd like to modify.")
+                        break  # Wait for the correct input
+                elif field == 'modifications' and not modifications:
+                    # Attempt to extract modifications from user input
+                    extracted_modifications = extract_modifications(sentence)
+                    if extracted_modifications:
+                        modifications.update(extracted_modifications)
+                        pending_action['data']['modifications'] = modifications
+                        missing_fields.remove('modifications')
+                        mod_desc = ', '.join([f"{k}: {', '.join(v)}" for k, v in extracted_modifications.items()])
+                        responses.append(f"Got modifications: {mod_desc}.")
+                    else:
+                        responses.append("What modifications would you like to make to your order?")
+                        break  # Wait for the correct input
+
+            # Update the pending_action data
+            pending_action['missing_fields'] = missing_fields
+            session['pending_action'] = pending_action
+
+            if not missing_fields:
+                # All required information is gathered, proceed to modify the order
+                response = modify_order_handler(session_id, session, sentence)
+                responses.append(response)
+                # Clear the pending_action
+                session.pop("pending_action", None)
+                # After handling, check for missing fields
+                missing_fields_response = check_missing_fields(session)
+                if missing_fields_response:
+                    responses.append(missing_fields_response)
+                else:
+                    responses.append("Anything else I can help with?")
+            else:
+                # Still missing some fields, continue prompting
+                pass  # Responses already contain the prompts
+
+            # Update session data and return the response
+            update_session(sessions_collection, session, session_id)
+            return jsonify({"response": "\n".join(responses), "session_id": session_id})
+
+        elif pending_action['action'] == 'reset_order':
+            # Handle reset_order pending action
+            # Since the reset_order pending action is a confirmation, we need to check for confirm/deny intents
+            predicted_tag, confidence = predict_intent(sentence)
+            if predicted_tag == 'confirm' and confidence != 'low':
+                response = intent_handlers["confirm"](session_id, session, sentence)
+                responses.append(response)
+                # Clear the pending_action
+                session.pop("pending_action", None)
+                # After handling confirmation, check for missing fields
+                missing_fields_response = check_missing_fields(session)
+                if missing_fields_response:
+                    responses.append(missing_fields_response)
+                else:
+                    responses.append("Anything else I can help with?")
+            elif predicted_tag == 'deny' and confidence != 'low':
+                response = intent_handlers["deny"](session_id, session, sentence)
+                responses.append(response)
+                # Clear the pending_action
+                session.pop("pending_action", None)
+                # After handling denial, check for missing fields
+                missing_fields_response = check_missing_fields(session)
+                if missing_fields_response:
+                    responses.append(missing_fields_response)
+                else:
+                    responses.append("Anything else I can help with?")
+            else:
+                responses.append("Please confirm if you want to reset your entire order. (yes/no)")
+
+            # Update session data and return the response
+            update_session(sessions_collection, session, session_id)
+            return jsonify({"response": "\n".join(responses), "session_id": session_id})
+
+    # Handle slot-filling
+    is_fixing = session.get("is_fixing", False)
     if is_fixing:
-        # Existing slot-filling logic
+        # Proceed with slot-filling
         field = missing_field_context.get("field")
         if field:
             value = extract_field_value(field, cleaned_sentence)
@@ -1142,71 +1217,99 @@ def chat():
                 else:
                     responses.append("Anything else I can help with?")
             else:
-                responses.append(f"I didn't catch the {field}. {field_prompts[field]}")
-    else:
-        # Predict intent
-        predicted_tag, confidence = predict_intent(sentence)
+                # Check if input is an interrupt
+                interrupt_tag = is_interrupt(sentence)
+                if interrupt_tag:
+                    # Handle the interrupt
+                    handler_function = intent_handlers.get(interrupt_tag, intent_handlers["fallback"])
+                    response = handler_function(session_id, session, sentence)
+                    responses.append(response)
+                    # After handling interrupt, check if we need to return to slot-filling
+                    if session.get("is_fixing", False):
+                        field = session.get("missing_field_context", {}).get("field")
+                        if field:
+                            responses.append(f"As we were saying, {field_prompts[field]}")
+                        else:
+                            responses.append("As we were saying, let's continue.")
+                    else:
+                        responses.append("Anything else I can help with?")
+                else:
+                    # Prompt the user again
+                    responses.append(f"I didn't catch the {field}. {field_prompts[field]}")
 
-        if DEBUG:
-            logger.debug(f"Predicted intent: {predicted_tag}, Confidence: {confidence}")
-
-        # Define interrupt and confirmation intents
-        confirmation_intents = ["confirm", "deny"]
-        interrupt_intents = ["remove_order", "modify_order", "restart_order", "show_menu", "check_order", "ask_options", "reset_order"]
-
-        # Handle confirmation intents if a pending action exists
-        if session.get("pending_action") and predicted_tag in confirmation_intents and confidence != "low":
-            if predicted_tag == "confirm":
-                response = intent_handlers["confirm"](session_id, session, sentence)
-                responses.append(response)
-            elif predicted_tag == "deny":
-                response = intent_handlers["deny"](session_id, session, sentence)
-                responses.append(response)
-            
-            # After handling confirmation, check if there are missing fields
-            missing_fields_response = check_missing_fields(session)
-            if missing_fields_response:
-                responses.append(missing_fields_response)
-            else:
-                responses.append("Anything else I can help with?")
-
-        elif predicted_tag in interrupt_intents and confidence != "low":
-            # Handle interrupt intents immediately
-            handler_function = intent_handlers.get(predicted_tag, intent_handlers["fallback"])
-            response = handler_function(session_id, session, sentence)
-            responses.append(response)
-            
-            # After handling interrupt, check if there are missing fields
-            missing_fields_response = check_missing_fields(session)
-            if missing_fields_response:
-                responses.append(missing_fields_response)
-            else:
-                responses.append("Anything else I can help with?")
-
-        elif predicted_tag in intent_handlers and confidence != "low":
-            handler_function = intent_handlers[predicted_tag]
-            # Call the handler function
-            response = handler_function(session_id, session, sentence)
-            responses.append(response)
-
-            # After handling, check if there are missing fields
-            missing_fields_response = check_missing_fields(session)
-            if missing_fields_response:
-                responses.append(missing_fields_response)
-            else:
-                responses.append("Anything else I can help with?")
-        elif confidence == "medium":
-            # Moderate confidence: ask for confirmation
-            responses.append(f"I think you want to {predicted_tag.replace('_', ' ')}. Is that correct?")
-        elif confidence == "low":
-            # Low confidence: use fallback intent
-            responses.append("I'm sorry, I didn't understand that. Could you please rephrase or specify your request?")
         else:
-            responses.append("I do not understand...")
+            # No field to fill, proceed
+            session['is_fixing'] = False
+            responses.append("Anything else I can help with?")
+        
+        # Update session data and return the response
+        update_session(sessions_collection, session, session_id)
+        return jsonify({"response": "\n".join(responses), "session_id": session_id})
+
+    # Now proceed to predict intent as usual
+    predicted_tag, confidence = predict_intent(sentence)
+
+    if DEBUG:
+        logger.debug(f"Predicted intent: {predicted_tag}, Confidence: {confidence}")
+
+    # Define confirmation intents
+    confirmation_intents = ["confirm", "deny"]
+    interrupt_intents = ["remove_order", "modify_order", "restart_order", "show_menu", "check_order", "ask_options", "reset_order"]
+
+    # Handle confirmation intents if a pending action exists
+    if session.get("pending_action") and predicted_tag in confirmation_intents and confidence != "low":
+        # We should only reach here if pending_action is not modify_order or reset_order
+        # Handle confirmation intents
+        handler_function = intent_handlers.get(predicted_tag)
+        response = handler_function(session_id, session, sentence)
+        responses.append(response)
+        # After handling confirmation, check for missing fields
+        missing_fields_response = check_missing_fields(session)
+        if missing_fields_response:
+            responses.append(missing_fields_response)
+        else:
+            responses.append("Anything else I can help with?")
+        # Update session data
+        update_session(sessions_collection, session, session_id)
+        return jsonify({"response": "\n".join(responses), "session_id": session_id})
+
+    # Handle interrupt intents
+    if predicted_tag in interrupt_intents and confidence != "low":
+        # Handle interrupt intents
+        handler_function = intent_handlers.get(predicted_tag, intent_handlers["fallback"])
+        response = handler_function(session_id, session, sentence)
+        responses.append(response)
+        # After handling interrupt, check for missing fields
+        missing_fields_response = check_missing_fields(session)
+        if missing_fields_response:
+            responses.append(missing_fields_response)
+        else:
+            responses.append("Anything else I can help with?")
+        # Update session data
+        update_session(sessions_collection, session, session_id)
+        return jsonify({"response": "\n".join(responses), "session_id": session_id})
+
+    # Handle other intents
+    if predicted_tag in intent_handlers and confidence != "low":
+        handler_function = intent_handlers[predicted_tag]
+        # Call the handler function
+        response = handler_function(session_id, session, sentence)
+        responses.append(response)
+
+        # After handling, check if there are missing fields
+        missing_fields_response = check_missing_fields(session)
+        if missing_fields_response:
+            responses.append(missing_fields_response)
+        else:
+            responses.append("Anything else I can help with?")
+    elif confidence == "medium":
+        # Moderate confidence: ask for confirmation
+        responses.append(f"I think you want to {predicted_tag.replace('_', ' ')}. Is that correct?")
+    else:
+        responses.append("I'm sorry, I didn't understand that. Could you please rephrase or specify your request?")
 
     # Update session data
     update_session(sessions_collection, session, session_id)
-
     return jsonify({"response": "\n".join(responses), "session_id": session_id})
 
 def _build_cors_preflight_response():
@@ -1237,5 +1340,5 @@ def serve_static(path):
 
 ## Uncomment the following lines if you want to run the Flask app locally
 if __name__ == '__main__':
-   port = int(os.environ.get("PORT", 5000))
-   app.run(host='0.0.0.0', port=port, debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=DEBUG)
