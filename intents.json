@@ -254,52 +254,6 @@
       ]
     },
     {
-      "tag": "confirm",
-      "patterns": [
-        "Yes",
-        "Yeah",
-        "Yep",
-        "Sure",
-        "Absolutely",
-        "Definitely",
-        "That's correct",
-        "Right",
-        "Exactly",
-        "Yes please",
-        "Yes, please",
-        "Yes, that's correct",
-        "Yes, exactly",
-        "Yes, absolutely"
-      ],
-      "responses": [
-        "Great!",
-        "Understood.",
-        "Got it."
-      ]
-    },
-    {
-      "tag": "deny",
-      "patterns": [
-        "No",
-        "Nope",
-        "Not really",
-        "I don't think so",
-        "Negative",
-        "That's wrong",
-        "Incorrect",
-        "No thanks",
-        "No, thanks",
-        "No, that's not right",
-        "No, I don't think so",
-        "No, that's incorrect"
-      ],
-      "responses": [
-        "Okay.",
-        "Understood.",
-        "No problem."
-      ]
-    },
-    {
       "tag": "fallback",
       "patterns": [],
       "responses": [
