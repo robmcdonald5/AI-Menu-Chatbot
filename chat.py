@@ -454,51 +454,82 @@ def process_order_spacy(session_id, input_sentence):
         return "Sorry, I didn't understand the items you want to order."
 
 # Unified Removal Function
-def handle_removal(session_id, session, sentence):
-    # Determine the removal method
-    removal_method = determine_removal_method(sentence)
+def handle_remove_order(session_id, session, sentence):
+    if DEBUG:
+        logger.debug("Handling remove_order intent.")
+
+    # Retrieve data from pending_action or directly from parameters
+    pending_action = session.get('pending_action') or {}
+    data = pending_action.get('data', {})
+    order_ids = data.get('order_ids', [])
+    features = data.get('features', {})
+
+    # If not using pending_action, extract directly from the user's input
+    if not order_ids:
+        order_ids = extract_order_ids(sentence)
+    if not features or all(not v for v in features.values()):
+        features = extract_features(sentence)
 
     if DEBUG:
-        logger.debug(f"Removal Method Determined: {removal_method}")
+        logger.debug(f"Order IDs extracted: {order_ids}")
+        logger.debug(f"Features extracted: {features}")
 
-    if removal_method == "reset_order":
-        # Prompt for confirmation
-        session["pending_action"] = {"action": "reset_order"}
-        return "Are you sure you want to reset your entire order? (yes/no)"
+    missing_fields = []
+    if not order_ids:
+        missing_fields.append('order_id')
+        if not features or all(not v for v in features.values()):
+            # Both order_id and features are missing
+            missing_fields.append('features')
 
-    elif removal_method == "by_order_id":
-        order_ids = extract_order_ids(sentence)
-        if order_ids:
-            removed_items = remove_items_by_ids(session_id, order_ids)
-            if removed_items:
-                return f"I've removed the following items from your order: {', '.join(removed_items)}."
+    if not missing_fields:
+        # Order IDs are present
+        removed_items = []
+
+        for oid in order_ids:
+            order = db.get_db().Orders.find_one({"session_id": session_id, "order_id": oid})
+            if not order:
+                logger.debug(f"Order ID {oid} not found.")
+                continue  # Skip if order not found
+
+            if features and any(v for v in features.values()):
+                # Features are specified, remove them from the order
+                for field in ['meats', 'rice', 'beans', 'toppings']:
+                    if features.get(field):
+                        existing_addons = order.get(field, [])
+                        addons_to_remove = [addon for addon in features[field] if addon in existing_addons]
+                        if addons_to_remove:
+                            # Remove specified addons
+                            updated_addons = [addon for addon in existing_addons if addon not in addons_to_remove]
+                            # Update the order in the database
+                            db.get_db().Orders.update_one(
+                                {"session_id": session_id, "order_id": oid},
+                                {"$set": {field: updated_addons}}
+                            )
+                            removed_items.append(f"Removed {', '.join(addons_to_remove)} from Order ID {oid}.")
             else:
-                return "I couldn't find any items with the specified IDs."
-        else:
-            return "I couldn't detect any order IDs in your request."
+                # No features specified, remove the entire order
+                db.get_db().Orders.delete_one({"session_id": session_id, "order_id": oid})
+                removed_items.append(f"Removed Order ID {oid}.")
 
-    else:
-        # Default to removal by features/descriptions
-        features = extract_features(sentence)
-        if DEBUG:
-            logger.debug(f"Features extracted for removal: {features}")
-        removed_items = remove_items_by_features(session_id, features)
         if removed_items:
-            return f"I've removed the following items from your order: {', '.join(removed_items)}."
+            return " ".join(removed_items)
         else:
-            return "I couldn't find any items matching the specified features."
-
-# Function to determine removal method
-def determine_removal_method(sentence):
-    # Define keywords for each removal method
-    # Updated regex to include 'remove order \d+' patterns
-    if re.search(r'\b(reset|start over|clear my order|delete my order|restart my order|erase my order)\b', sentence, re.IGNORECASE):
-        return "reset_order"
-    elif re.search(r'\b(order id|item id|order number|delete \d+|remove(?: order)? \d+|cancel \d+)\b', sentence, re.IGNORECASE):
-        return "by_order_id"
+            return "No valid items were removed from your order."
     else:
-        # Default to removal by features/descriptions
-        return "by_features"
+        # Set pending_action with the missing fields
+        session['pending_action'] = {
+            'action': 'remove_order',
+            'missing_fields': missing_fields,
+            'data': {
+                'order_ids': order_ids,
+                'features': features or {}
+            }
+        }
+        # Create appropriate prompt based on missing fields
+        if 'order_id' in missing_fields and 'features' in missing_fields:
+            return "Sure, which Order ID would you like to remove, and what items or add-ons would you like to remove? Please provide both."
+        elif 'order_id' in missing_fields:
+            return "Sure, which Order ID would you like to remove items from? Please provide the Order ID."
 
 # Function to extract order IDs
 def extract_order_ids(input_sentence):
@@ -523,14 +554,39 @@ def extract_order_ids(input_sentence):
     return order_ids
 
 # Function to remove items by IDs
-def remove_items_by_ids(session_id, order_ids):
+def remove_items_by_ids_and_features(session_id, order_ids, features):
     removed_items = []
     for oid in order_ids:
         order = db.get_db().Orders.find_one({"session_id": session_id, "order_id": oid})
-        if order:
-            removed_items.append(f"{order['item'].capitalize()} (Order ID {oid})")
-            db.get_db().Orders.delete_one({"session_id": session_id, "order_id": oid})
-    return removed_items
+        if not order:
+            continue  # Skip if order not found
+        
+        # Iterate over each feature field
+        for field in ['item', 'meats', 'rice', 'beans', 'toppings']:
+            if features.get(field):
+                if field == 'item':
+                    # Remove the entire order if the item matches
+                    if order.get('item') == features['item']:
+                        removed_items.append(f"{order['item'].capitalize()} (Order ID {oid})")
+                        db.get_db().Orders.delete_one({"session_id": session_id, "order_id": oid})
+                        break  # Move to next order
+                else:
+                    existing_addons = order.get(field, [])
+                    addons_to_remove = [addon for addon in features[field] if addon in existing_addons]
+                    if addons_to_remove:
+                        # Remove specified addons
+                        existing_addons = [addon for addon in existing_addons if addon not in addons_to_remove]
+                        # Update the order in the database
+                        db.get_db().Orders.update_one(
+                            {"session_id": session_id, "order_id": oid},
+                            {"$set": {field: existing_addons}}
+                        )
+                        removed_items.append(f"Removed {', '.join(addons_to_remove)} from Order ID {oid}.")
+    
+    if removed_items:
+        return " ".join(removed_items)
+    else:
+        return "No valid items were removed from your order."
 
 # Function to extract features
 def extract_features(input_sentence):
@@ -567,36 +623,6 @@ def extract_features(input_sentence):
         logger.debug(f"Features extracted: {features}")
 
     return features
-
-# Function to remove items by features
-def remove_items_by_features(session_id, features):
-    removed_items = []
-    query = {"session_id": session_id}
-
-    if features["item"]:
-        query["item"] = features["item"]
-    if features["meats"]:
-        query["meats"] = {"$in": features["meats"]}
-    if features["rice"]:
-        query["rice"] = {"$in": features["rice"]}
-    if features["beans"]:
-        query["beans"] = {"$in": features["beans"]}
-    if features["toppings"]:
-        query["toppings"] = {"$in": features["toppings"]}
-
-    if DEBUG:
-        logger.debug(f"Query for removal by features: {query}")
-
-    orders_to_remove = list(db.get_db().Orders.find(query))
-
-    if DEBUG:
-        logger.debug(f"Orders to remove based on features: {orders_to_remove}")
-
-    for order in orders_to_remove:
-        removed_items.append(f"{order['item'].capitalize()} (Order ID {order['order_id']})")
-        db.get_db().Orders.delete_one({"session_id": session_id, "order_id": order["order_id"]})
-
-    return removed_items
 
 # Function to predict intent
 def predict_intent(user_input):
@@ -790,7 +816,7 @@ def extract_modifications(user_input):
 
 def modify_order_handler(session_id, session, sentence):
     # Retrieve data from pending_action or directly from parameters
-    pending_action = session.get('pending_action', {})
+    pending_action = session.get('pending_action') or {}
     data = pending_action.get('data', {})
     order_ids = data.get('order_ids', [])
     modifications = data.get('modifications', {})
@@ -805,63 +831,96 @@ def modify_order_handler(session_id, session, sentence):
         logger.debug(f"Modifying Order IDs: {order_ids}")
         logger.debug(f"With Modifications: {modifications}")
     
-    # Validate order_ids
-    valid_order_ids = []
-    for oid in order_ids:
-        order = db.get_db().Orders.find_one({"session_id": session_id, "order_id": oid})
-        if order:
-            valid_order_ids.append(oid)
-        else:
-            logger.debug(f"Order ID {oid} not found.")
+    missing_fields = []
+    if not order_ids:
+        missing_fields.append('order_id')
+    if not modifications:
+        missing_fields.append('modifications')
     
-    if not valid_order_ids:
-        return "I couldn't find any valid Order IDs in your request."
-    
-    # Proceed to update each valid order
-    confirmation_messages = []
-    for oid in valid_order_ids:
-        order = db.get_db().Orders.find_one({"session_id": session_id, "order_id": oid})
-        if not order:
-            continue  # Skip if order not found
+    if not missing_fields:
+        # Both Order ID and modifications are specified
+        # Proceed to modify the order
+        valid_order_ids = []
+        for oid in order_ids:
+            order = db.get_db().Orders.find_one({"session_id": session_id, "order_id": oid})
+            if order:
+                valid_order_ids.append(oid)
+            else:
+                logger.debug(f"Order ID {oid} not found.")
         
-        # Iterate over each modification field
-        for field, addons in modifications.items():
-            existing_addons = order.get(field, [])
-            # Remove addons specified in modifications
-            addons_to_remove = [addon for addon in addons if addon in existing_addons]
-            # Add addons specified in modifications that aren't already present
-            addons_to_add = [addon for addon in addons if addon not in existing_addons]
+        if not valid_order_ids:
+            return "I couldn't find any valid Order IDs in your request."
+        
+        # Proceed to update each valid order
+        confirmation_messages = []
+        for oid in valid_order_ids:
+            order = db.get_db().Orders.find_one({"session_id": session_id, "order_id": oid})
+            if not order:
+                continue  # Skip if order not found
             
-            if addons_to_remove:
-                existing_addons = [addon for addon in existing_addons if addon not in addons_to_remove]
-            if addons_to_add:
-                existing_addons.extend(addons_to_add)
-            
-            # Update the order in the database
-            db.get_db().Orders.update_one(
-                {"session_id": session_id, "order_id": oid},
-                {"$set": {field: existing_addons}}
-            )
-            
-            if addons_to_remove and addons_to_add:
-                confirmation_messages.append(f"Replaced {', '.join(addons_to_remove)} with {', '.join(addons_to_add)} in Order ID {oid}.")
-            elif addons_to_remove:
-                confirmation_messages.append(f"Removed {', '.join(addons_to_remove)} from Order ID {oid}.")
-            elif addons_to_add:
-                confirmation_messages.append(f"Added {', '.join(addons_to_add)} to Order ID {oid}.")
-    
-    if confirmation_messages:
-        return " ".join(confirmation_messages)
+            # Iterate over each modification field
+            for field, addons in modifications.items():
+                existing_addons = order.get(field, [])
+                # Remove addons specified in modifications
+                addons_to_remove = [addon for addon in addons if addon in existing_addons]
+                # Add addons specified in modifications that aren't already present
+                addons_to_add = [addon for addon in addons if addon not in existing_addons]
+                
+                if addons_to_remove:
+                    existing_addons = [addon for addon in existing_addons if addon not in addons_to_remove]
+                if addons_to_add:
+                    existing_addons.extend(addons_to_add)
+                
+                # Update the order in the database
+                db.get_db().Orders.update_one(
+                    {"session_id": session_id, "order_id": oid},
+                    {"$set": {field: existing_addons}}
+                )
+                
+                if addons_to_remove and addons_to_add:
+                    confirmation_messages.append(f"Replaced {', '.join(addons_to_remove)} with {', '.join(addons_to_add)} in Order ID {oid}.")
+                elif addons_to_remove:
+                    confirmation_messages.append(f"Removed {', '.join(addons_to_remove)} from Order ID {oid}.")
+                elif addons_to_add:
+                    confirmation_messages.append(f"Added {', '.join(addons_to_add)} to Order ID {oid}.")
+        
+        if confirmation_messages:
+            return " ".join(confirmation_messages)
+        else:
+            return "No valid modifications were made to your order."
     else:
-        return "No valid modifications were made to your order."
+        # Set pending_action with the missing fields
+        session['pending_action'] = {
+            'action': 'modify_order',
+            'missing_fields': missing_fields,
+            'data': {
+                'order_ids': order_ids,
+                'modifications': modifications or {}
+            }
+        }
+        # Create appropriate prompt based on missing fields
+        if 'order_id' in missing_fields and 'modifications' in missing_fields:
+            return "Sure, which Order ID would you like to modify, and what changes would you like to make? Please provide both."
+        elif 'order_id' in missing_fields:
+            return "Sure, which Order ID would you like to modify? Please provide the Order ID."
+        elif 'modifications' in missing_fields:
+            return "What modifications would you like to make to your order?"
 
 def handle_modify_order(session_id, session, sentence):
     if DEBUG:
         logger.debug("Handling modify_order intent.")
     
-    # Extract order IDs and modifications from the user's input
-    order_ids = extract_order_ids(sentence)
-    modifications = extract_modifications(sentence)  # New function to extract modifications
+    # Retrieve data from pending_action or directly from parameters
+    pending_action = session.get('pending_action') or {}
+    data = pending_action.get('data', {})
+    order_ids = data.get('order_ids', [])
+    modifications = data.get('modifications', {})
+    
+    # If not using pending_action, extract directly
+    if not order_ids:
+        order_ids = extract_order_ids(sentence)
+    if not modifications:
+        modifications = extract_modifications(sentence) or {}  # Ensure modifications is a dict
     
     if DEBUG:
         logger.debug(f"Extracted Order IDs: {order_ids}")
@@ -875,7 +934,8 @@ def handle_modify_order(session_id, session, sentence):
     
     if not missing_fields:
         # Both Order ID and modifications are specified
-        return modify_order_handler(session_id, session, sentence)
+        response = modify_order_handler(session_id, session, sentence)
+        return response
     else:
         # Set pending_action with the missing fields
         session['pending_action'] = {
@@ -910,6 +970,8 @@ def handle_confirm(session_id, session, sentence):
         session.pop("pending_action", None)
         return "Your order has been reset. You can start a new order."
     else:
+        # Clear pending action
+        session.pop("pending_action", None)
         return "Great! Let's continue with your order."
 
 # Function to handle denial of critical actions
@@ -919,18 +981,20 @@ def handle_deny(session_id, session, sentence):
         session.pop("pending_action", None)
         return "Alright, your order remains unchanged."
     else:
+        # Clear pending action
+        session.pop("pending_action", None)
         return "Okay, let's clarify your request. What would you like to do?"
 
 # Mapping of intent tags to handler functions
 intent_handlers = {
     "goodbye": lambda sid, s, sen: random.choice(intents_dict['goodbye']['responses']),
     "order": process_order,
-    "remove_order": handle_removal,
+    "remove_order": handle_remove_order,
     "modify_order": handle_modify_order,
-    "reset_order": handle_removal,
+    "reset_order": handle_remove_order,  # If reset_order uses the same handler
     "checkout": checkout_order,
     "check_order": check_order,
-    "restart_order": handle_removal,
+    "restart_order": handle_remove_order,  # If restart_order uses the same handler
     "show_menu": check_menu,
     "ask_options": provide_options,
     "confirm": handle_confirm,
@@ -1023,10 +1087,11 @@ def chat():
                     'session_id': session_id,
                     'is_fixing': False,
                     'missing_field_context': {},
-                    'pending_action': None,
                     'chat_length': 0,
                     'last_activity': datetime.now(timezone.utc)
                 }
+                # Remove pending_action from session
+                session.pop('pending_action', None)
                 sessions_collection.replace_one({'session_id': session_id}, session, upsert=True)
             else:
                 # Update last_activity
@@ -1043,10 +1108,11 @@ def chat():
                 'session_id': session_id,
                 'is_fixing': False,
                 'missing_field_context': {},
-                'pending_action': None,
                 'chat_length': 0,
                 'last_activity': datetime.now(timezone.utc)
             }
+            # Remove pending_action from session
+            session.pop('pending_action', None)
             sessions_collection.insert_one(session)
             if DEBUG:
                 logger.debug(f"Session data not found, created new session with session_id: {session_id}")
@@ -1057,10 +1123,11 @@ def chat():
             'session_id': session_id,
             'is_fixing': False,
             'missing_field_context': {},
-            'pending_action': None,
             'chat_length': 0,
             'last_activity': datetime.now(timezone.utc)
         }
+        # Remove pending_action from session
+        session.pop('pending_action', None)
         sessions_collection.insert_one(session)
         if DEBUG:
             logger.debug(f"New session created with session_id: {session_id}")
@@ -1096,11 +1163,11 @@ def chat():
         else:
             return None
 
-    # Get pending action
-    pending_action = session.get("pending_action")
+    # Get pending action and ensure it's a dictionary
+    pending_action = session.get("pending_action") or {}
 
     # Handle pending actions that should not accept interrupts
-    if pending_action and pending_action.get("action") in ["modify_order", "reset_order"]:
+    if pending_action and pending_action.get("action") in ["modify_order", "remove_order", "reset_order"]:
         # Do not accept interrupts during these pending actions
         # Suspend slot-filling
         session['is_fixing'] = False
@@ -1109,8 +1176,8 @@ def chat():
         if pending_action['action'] == 'modify_order':
             # Handle modify_order pending action
             # Extract order IDs and modifications from the user's input
-            order_ids = pending_action['data'].get('order_ids', [])
-            modifications = pending_action['data'].get('modifications', {})
+            order_ids = pending_action.get('data', {}).get('order_ids', [])
+            modifications = pending_action.get('data', {}).get('modifications', {})
 
             # Extract missing fields
             missing_fields = pending_action.get('missing_fields', [])
@@ -1166,11 +1233,71 @@ def chat():
             update_session(sessions_collection, session, session_id)
             return jsonify({"response": "\n".join(responses), "session_id": session_id})
 
+        elif pending_action['action'] == 'remove_order':
+            # Handle remove_order pending action
+            # Extract order IDs and features from the user's input
+            order_ids = pending_action.get('data', {}).get('order_ids', [])
+            features = pending_action.get('data', {}).get('features', {})
+
+            # Extract missing fields
+            missing_fields = pending_action.get('missing_fields', [])
+
+            # Proceed with handling the pending action
+            # Iterate through missing fields and prompt for each
+            for field in missing_fields.copy():
+                if field == 'order_id' and not order_ids:
+                    # Attempt to extract Order ID from user input
+                    extracted_order_ids = extract_order_ids(sentence)
+                    if extracted_order_ids:
+                        order_ids.extend(extracted_order_ids)
+                        pending_action['data']['order_ids'] = order_ids
+                        missing_fields.remove('order_id')
+                        responses.append(f"Got Order ID(s): {', '.join(map(str, extracted_order_ids))}.")
+                    else:
+                        responses.append("I'm sorry, I didn't catch the Order ID. Please provide the Order ID you'd like to remove items from.")
+                        break  # Wait for the correct input
+                elif field == 'features' and (not features or all(not v for v in features.values())):
+                    # Attempt to extract features from user input
+                    extracted_features = extract_features(sentence)
+                    if extracted_features and any(extracted_features.values()):
+                        features.update(extracted_features)
+                        pending_action['data']['features'] = features
+                        missing_fields.remove('features')
+                        feature_desc = ', '.join([f"{k}: {', '.join(v)}" for k, v in extracted_features.items() if v])
+                        responses.append(f"Got items to remove: {feature_desc}.")
+                    else:
+                        responses.append("What items or add-ons would you like to remove from your order?")
+                        break  # Wait for the correct input
+
+            # Update the pending_action data
+            pending_action['missing_fields'] = missing_fields
+            session['pending_action'] = pending_action
+
+            if not missing_fields:
+                # All required information is gathered, proceed to remove the items
+                response = handle_remove_order(session_id, session, sentence)
+                responses.append(response)
+                # Clear the pending_action
+                session.pop("pending_action", None)
+                # After handling, check for missing fields
+                missing_fields_response = check_missing_fields(session)
+                if missing_fields_response:
+                    responses.append(missing_fields_response)
+                else:
+                    responses.append("Anything else I can help with?")
+            else:
+                # Still missing some fields, continue prompting
+                pass  # Responses already contain the prompts
+
+            # Update session data and return the response
+            update_session(sessions_collection, session, session_id)
+            return jsonify({"response": "\n".join(responses), "session_id": session_id})
+
         elif pending_action['action'] == 'reset_order':
             # Handle reset_order pending action
             # Since the reset_order pending action is a confirmation, we need to check for confirm/deny intents
             predicted_tag, confidence = predict_intent(sentence)
-            if predicted_tag == 'confirm' and confidence != 'low':
+            if predicted_tag == 'confirm' and confidence != "low":
                 response = intent_handlers["confirm"](session_id, session, sentence)
                 responses.append(response)
                 # Clear the pending_action
@@ -1181,7 +1308,7 @@ def chat():
                     responses.append(missing_fields_response)
                 else:
                     responses.append("Anything else I can help with?")
-            elif predicted_tag == 'deny' and confidence != 'low':
+            elif predicted_tag == 'deny' and confidence != "low":
                 response = intent_handlers["deny"](session_id, session, sentence)
                 responses.append(response)
                 # Clear the pending_action
@@ -1220,19 +1347,22 @@ def chat():
                 # Check if input is an interrupt
                 interrupt_tag = is_interrupt(sentence)
                 if interrupt_tag:
-                    # Handle the interrupt
-                    handler_function = intent_handlers.get(interrupt_tag, intent_handlers["fallback"])
-                    response = handler_function(session_id, session, sentence)
-                    responses.append(response)
-                    # After handling interrupt, check if we need to return to slot-filling
-                    if session.get("is_fixing", False):
-                        field = session.get("missing_field_context", {}).get("field")
-                        if field:
-                            responses.append(f"As we were saying, {field_prompts[field]}")
-                        else:
-                            responses.append("As we were saying, let's continue.")
+                    # Do not interrupt if in a pending action
+                    if session.get("pending_action") and session["pending_action"].get("action") in ["modify_order", "remove_order"]:
+                        responses.append("Please complete your current request before making a new one.")
                     else:
-                        responses.append("Anything else I can help with?")
+                        handler_function = intent_handlers.get(interrupt_tag, intent_handlers["fallback"])
+                        response = handler_function(session_id, session, sentence)
+                        responses.append(response)
+                        # After handling interrupt, check if we need to return to slot-filling
+                        if session.get("is_fixing", False):
+                            field = session.get("missing_field_context", {}).get("field")
+                            if field:
+                                responses.append(f"As we were saying, {field_prompts[field]}")
+                            else:
+                                responses.append("As we were saying, let's continue.")
+                        else:
+                            responses.append("Anything else I can help with?")
                 else:
                     # Prompt the user again
                     responses.append(f"I didn't catch the {field}. {field_prompts[field]}")
@@ -1258,33 +1388,39 @@ def chat():
 
     # Handle confirmation intents if a pending action exists
     if session.get("pending_action") and predicted_tag in confirmation_intents and confidence != "low":
-        # We should only reach here if pending_action is not modify_order or reset_order
-        # Handle confirmation intents
-        handler_function = intent_handlers.get(predicted_tag)
-        response = handler_function(session_id, session, sentence)
-        responses.append(response)
-        # After handling confirmation, check for missing fields
-        missing_fields_response = check_missing_fields(session)
-        if missing_fields_response:
-            responses.append(missing_fields_response)
-        else:
-            responses.append("Anything else I can help with?")
-        # Update session data
-        update_session(sessions_collection, session, session_id)
-        return jsonify({"response": "\n".join(responses), "session_id": session_id})
+        if session["pending_action"].get("action") not in ["modify_order", "remove_order", "reset_order"]:
+            # Handle confirmation intents
+            handler_function = intent_handlers.get(predicted_tag)
+            response = handler_function(session_id, session, sentence)
+            responses.append(response)
+            # Clear the pending_action
+            session.pop("pending_action", None)
+            # After handling confirmation, check for missing fields
+            missing_fields_response = check_missing_fields(session)
+            if missing_fields_response:
+                responses.append(missing_fields_response)
+            else:
+                responses.append("Anything else I can help with?")
+            # Update session data
+            update_session(sessions_collection, session, session_id)
+            return jsonify({"response": "\n".join(responses), "session_id": session_id})
 
     # Handle interrupt intents
     if predicted_tag in interrupt_intents and confidence != "low":
-        # Handle interrupt intents
-        handler_function = intent_handlers.get(predicted_tag, intent_handlers["fallback"])
-        response = handler_function(session_id, session, sentence)
-        responses.append(response)
-        # After handling interrupt, check for missing fields
-        missing_fields_response = check_missing_fields(session)
-        if missing_fields_response:
-            responses.append(missing_fields_response)
+        # Do not interrupt if in a pending action for modify_order or remove_order
+        if session.get("pending_action") and session["pending_action"].get("action") in ["modify_order", "remove_order"]:
+            responses.append("Please complete your current request before making a new one.")
         else:
-            responses.append("Anything else I can help with?")
+            # Handle interrupt intents
+            handler_function = intent_handlers.get(predicted_tag, intent_handlers["fallback"])
+            response = handler_function(session_id, session, sentence)
+            responses.append(response)
+            # After handling interrupt, check for missing fields
+            missing_fields_response = check_missing_fields(session)
+            if missing_fields_response:
+                responses.append(missing_fields_response)
+            else:
+                responses.append("Anything else I can help with?")
         # Update session data
         update_session(sessions_collection, session, session_id)
         return jsonify({"response": "\n".join(responses), "session_id": session_id})
