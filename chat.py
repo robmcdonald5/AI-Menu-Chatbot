@@ -1,3 +1,4 @@
+import difflib
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import random
@@ -126,28 +127,105 @@ def update_order(session_id, order_id, field, value):
     if DEBUG:
         order_before = db.get_db().Orders.find_one({"session_id": session_id, "order_id": order_id})
         logger.debug(f"Order before update: {order_before}")
-    if value:  # Only update if there are values to set
+    
+    # Handle the case where value is None or empty
+    if value is None:
+        if DEBUG:
+            logger.debug(f"No value provided for field '{field}'. Skipping update.")
+        return (f"No modifications provided for {field}.", False)
+    
+    # Special handling for "none" selection
+    if isinstance(value, list) and len(value) == 1 and value[0].lower() == "none":
+        if DEBUG:
+            logger.debug(f"Setting {field} to empty array due to 'none' selection")
+        
+        # Use $set to explicitly set an empty array and mark field as completed
+        update_data = {
+            "$set": {
+                field: [],
+                f"{field}_completed": True  # Mark this field as intentionally empty
+            }
+        }
+        
         result = db.get_db().Orders.update_one(
             {"session_id": session_id, "order_id": order_id},
-            {"$set": {field: value}}
+            update_data
         )
+        
         if DEBUG:
-            logger.debug(f"Update result: matched {result.matched_count}, modified {result.modified_count}")
-        # Check if order is now complete
+            logger.debug(f"Update result for 'none' selection: matched {result.matched_count}, modified {result.modified_count}")
+        
+        # Verify the update
         order = db.get_db().Orders.find_one({"session_id": session_id, "order_id": order_id})
         if DEBUG:
-            logger.debug(f"Updated order: {order}")
+            logger.debug(f"Updated order after 'none' selection: {order}")
+        
+        # Check if all required fields are now complete
         required_fields = ["meats", "rice", "beans", "toppings"]
-        if all(order.get(f) for f in required_fields):
+        fields_status = {}
+        for req_field in required_fields:
+            is_completed = (
+                order.get(f"{req_field}_completed", False) or  # Check completion flag
+                (isinstance(order.get(req_field), list) and len(order.get(req_field)) > 0)  # Or has values
+            )
+            fields_status[req_field] = is_completed
+            
+        if DEBUG:
+            logger.debug(f"Fields completion status: {fields_status}")
+        
+        if all(fields_status.values()):
             db.get_db().Orders.update_one(
                 {"session_id": session_id, "order_id": order_id},
                 {"$set": {"completed": True}}
             )
-        return f"Updated order {order_id} with {field}: {', '.join(value)}"
-    else:
+            if DEBUG:
+                logger.debug("Order marked as completed after 'none' selection")
+        
+        return (f"Set {field} to none for order {order_id}", True)
+    
+    # Normal case - update with provided values
+    update_data = {
+        "$set": {
+            field: value,
+            f"{field}_completed": True  # Mark field as completed with actual values
+        }
+    }
+    
+    result = db.get_db().Orders.update_one(
+        {"session_id": session_id, "order_id": order_id},
+        update_data
+    )
+    
+    if DEBUG:
+        logger.debug(f"Update result: matched {result.matched_count}, modified {result.modified_count}")
+    
+    # Verify the update
+    order = db.get_db().Orders.find_one({"session_id": session_id, "order_id": order_id})
+    if DEBUG:
+        logger.debug(f"Updated order: {order}")
+    
+    # Check if all required fields are now complete
+    required_fields = ["meats", "rice", "beans", "toppings"]
+    fields_status = {}
+    for req_field in required_fields:
+        is_completed = (
+            order.get(f"{req_field}_completed", False) or  # Check completion flag
+            (isinstance(order.get(req_field), list) and len(order.get(req_field)) > 0)  # Or has values
+        )
+        fields_status[req_field] = is_completed
+        
+    if DEBUG:
+        logger.debug(f"Fields completion status: {fields_status}")
+    
+    if all(fields_status.values()):
+        db.get_db().Orders.update_one(
+            {"session_id": session_id, "order_id": order_id},
+            {"$set": {"completed": True}}
+        )
         if DEBUG:
-            logger.debug(f"No value provided for field '{field}'. Skipping update.")
-        return f"No modifications provided for {field}."
+            logger.debug("Order marked as completed")
+    
+    return (f"Updated order {order_id} with {field}: {', '.join(value) if value else 'none'}", True)
 
 def replace_spelled_numbers(text):
     words = text.split()
@@ -291,15 +369,21 @@ def text2int(textnum):
 # Function to extract field values using PhraseMatcher
 def extract_field_value(field, user_input):
     matcher = PhraseMatcher(nlp.vocab, attr="LOWER")
+    
+    # Handle explicit "none" or "no" inputs
+    user_input_lower = user_input.lower()
+    if user_input_lower in ["none", "no", "nothing", "skip"]:
+        return ["none"], True
+        
     # Add field-specific patterns
     if field == "meats":
-        patterns = [nlp.make_doc(text) for text in meats]
+        patterns = [nlp.make_doc(text) for text in meats + ["none"]]
     elif field == "rice":
-        patterns = [nlp.make_doc(text) for text in rice]
+        patterns = [nlp.make_doc(text) for text in rice + ["none"]]
     elif field == "beans":
-        patterns = [nlp.make_doc(text) for text in beans]
+        patterns = [nlp.make_doc(text) for text in beans + ["none"]]
     elif field == "toppings":
-        patterns = [nlp.make_doc(text) for text in toppings]
+        patterns = [nlp.make_doc(text) for text in toppings + ["none"]]
     else:
         return None, False
         
@@ -317,7 +401,11 @@ def extract_field_value(field, user_input):
         values = set()
         for match_id, start, end in matches:
             span = doc[start:end]
-            values.add(span.text.lower())
+            value = span.text.lower()
+            # If "none" is selected, it should be the only value
+            if value == "none":
+                return ["none"], True
+            values.add(value)
         if DEBUG:
             logger.debug(f"Matches found: {values}")
         return list(values), True
@@ -708,14 +796,22 @@ def check_missing_fields(session):
     session_id = session['session_id']
     # Only consider orders for this session that are not completed
     orders = list(db.get_db().Orders.find({"session_id": session_id, "completed": False}))
+    
     if DEBUG:
         logger.debug(f"Orders with missing fields: {orders}")
+    
     for order in orders:
         category = order.get("category", "other")
         if category == "entree":
             # Iterate over each required add-on field
             for field in ["meats", "rice", "beans", "toppings"]:
-                if not order.get(field):  # Checks if the list is empty or missing
+                # Check if field is incomplete
+                is_field_complete = (
+                    order.get(f"{field}_completed", False) or  # Check completion flag
+                    (isinstance(order.get(field), list) and len(order.get(field)) > 0)  # Or has values
+                )
+                
+                if not is_field_complete:
                     if DEBUG:
                         logger.debug(f"Missing field '{field}' in order: {order}")
                     session["missing_field_context"]["order_id"] = order["order_id"]
@@ -729,6 +825,7 @@ def check_missing_fields(session):
                     {"session_id": session_id, "order_id": order["order_id"]},
                     {"$set": {"completed": True}}
                 )
+    
     session["is_fixing"] = False  # No missing fields left
     return None
 
@@ -791,6 +888,7 @@ def provide_options(session_id, session, sentence):
         return "You can order burritos, bowls, tacos, salads, and more."
 
 def determine_field(addon):
+    addon = addon.lower()
     if addon in meats:
         return 'meats'
     elif addon in rice:
@@ -800,7 +898,26 @@ def determine_field(addon):
     elif addon in toppings:
         return 'toppings'
     else:
-        return None
+        # Try to fuzzy match the addon to the closest category
+        closest_match = None
+        highest_similarity = 0
+        
+        all_items = {
+            'meats': meats,
+            'rice': rice,
+            'beans': beans,
+            'toppings': toppings
+        }
+        
+        for category, items in all_items.items():
+            for item in items:
+                # Compute similarity between addon and item
+                similarity = difflib.SequenceMatcher(None, addon, item.lower()).ratio()
+                if similarity > highest_similarity and similarity > 0.8:  # 80% similarity threshold
+                    highest_similarity = similarity
+                    closest_match = category
+        
+        return closest_match
 
 def extract_modifications(user_input):
     modifications = defaultdict(list)
@@ -809,7 +926,7 @@ def extract_modifications(user_input):
     doc = nlp(user_input.lower())
     
     for token in doc:
-        if token.text in ['replace', 'change', 'swap']:
+        if token.text in ['replace', 'change', 'swap', 'modify']:
             # Look for the object to replace (direct object)
             obj = None
             for child in token.children:
@@ -819,7 +936,7 @@ def extract_modifications(user_input):
             # Look for the new value (prep object)
             prep = None
             for child in token.children:
-                if child.dep_ == 'prep' and child.text in ['with', 'for']:
+                if child.dep_ == 'prep' and child.text in ['with', 'for', 'to']:
                     for prep_child in child.children:
                         if prep_child.dep_ == 'pobj':
                             prep = prep_child.text
@@ -828,17 +945,27 @@ def extract_modifications(user_input):
                 # Determine which field the object belongs to
                 field = determine_field(obj)
                 if field:
-                    modifications[field].append(prep)
-                    modifications[field].append(obj)  # Including obj for removal
-    # If no replace actions detected, assume all add-ons are to be added
+                    # Remove duplicates while keeping order
+                    if prep not in modifications[field]:
+                        modifications[field].append(prep)
+                    if obj not in modifications[field]:
+                        modifications[field].append(obj)  # Including obj for removal
+    
+    # If no replace actions detected, check for direct add-ons
     if not modifications:
         for field in ['meats', 'rice', 'beans', 'toppings']:
-            addons = extract_field_value(field, user_input)
+            addons = extract_field_value(field, user_input)[0]  # Use the first element of the tuple
             if addons:
-                modifications[field].extend(addons)
+                modifications[field].extend(addon for addon in addons if addon not in modifications[field])
     
-    # Remove duplicates and ensure lists
-    final_modifications = {field: list(set(addons)) for field, addons in modifications.items()}
+    # Convert defaultdict to regular dict and ensure unique values while preserving order
+    final_modifications = {}
+    for field, addons in modifications.items():
+        # Use dict.fromkeys to remove duplicates while preserving order
+        final_modifications[field] = list(dict.fromkeys(addons))
+    
+    if DEBUG:
+        logger.debug(f"Extracted modifications: {final_modifications}")
     
     return final_modifications if final_modifications else None
 
@@ -946,112 +1073,115 @@ def handle_modify_order(session_id, session, sentence):
         logger.info(f"Session {session_id}: User canceled the modify_order action.")
         return "Okay, I've canceled the modification request. How else can I assist you?"
 
-    # Existing modify_order logic continues here...
+    try:
+        # Retrieve data from pending_action or directly from parameters
+        pending_action = session.get('pending_action') or {}
+        data = pending_action.get('data', {})
+        order_ids = data.get('order_ids', [])
+        modifications = data.get('modifications', {})
 
-    # Retrieve data from pending_action or directly from parameters
-    pending_action = session.get('pending_action') or {}
-    data = pending_action.get('data', {})
-    order_ids = data.get('order_ids', [])
-    modifications = data.get('modifications', {})
+        # If not using pending_action, extract directly from the user's input
+        if not order_ids:
+            order_ids = extract_order_ids(sentence)
+        if not modifications:
+            modifications = extract_modifications(sentence)
+        
+        if DEBUG:
+            logger.debug(f"Order IDs extracted: {order_ids}")
+            logger.debug(f"Modifications extracted: {modifications}")
 
-    # If not using pending_action, extract directly from the user's input
-    if not order_ids:
-        order_ids = extract_order_ids(sentence)
-    if not modifications:
-        modifications = extract_modifications(sentence) or {}  # Ensure modifications is a dict
+        missing_fields = []
+        if not order_ids:
+            missing_fields.append('order_id')
+        if not modifications:
+            missing_fields.append('modifications')
 
-    if DEBUG:
-        logger.debug(f"Extracted Order IDs: {order_ids}")
-        logger.debug(f"Extracted Modifications: {modifications}")
+        if not missing_fields:
+            # Both Order ID and modifications are specified
+            valid_order_ids = []
+            for oid in order_ids:
+                order = db.get_db().Orders.find_one({"session_id": session_id, "order_id": oid})
+                if order:
+                    valid_order_ids.append(oid)
+                else:
+                    logger.debug(f"Order ID {oid} not found.")
 
-    missing_fields = []
-    if not order_ids:
-        missing_fields.append('order_id')
-    if not modifications:
-        missing_fields.append('modifications')
+            if not valid_order_ids:
+                return "I couldn't find any valid Order IDs in your request."
 
-    if not missing_fields:
-        # Both Order ID and modifications are specified
-        # Proceed to modify the order
-        valid_order_ids = []
-        for oid in order_ids:
-            order = db.get_db().Orders.find_one({"session_id": session_id, "order_id": oid})
-            if order:
-                valid_order_ids.append(oid)
+            # Proceed to update each valid order
+            confirmation_messages = []
+            for oid in valid_order_ids:
+                order = db.get_db().Orders.find_one({"session_id": session_id, "order_id": oid})
+                if not order:
+                    continue
+
+                # Iterate over each modification field
+                for field, addons in modifications.items():
+                    existing_addons = order.get(field, [])
+                    # Remove addons specified in modifications that exist in current order
+                    addons_to_remove = [addon for addon in addons if addon in existing_addons]
+                    # Add new addons specified in modifications
+                    addons_to_add = [addon for addon in addons if addon not in existing_addons and addon not in addons_to_remove]
+
+                    if addons_to_remove or addons_to_add:
+                        # Update existing_addons list
+                        updated_addons = [addon for addon in existing_addons if addon not in addons_to_remove]
+                        updated_addons.extend(addons_to_add)
+
+                        # Update the order in the database
+                        db.get_db().Orders.update_one(
+                            {"session_id": session_id, "order_id": oid},
+                            {"$set": {field: updated_addons}}
+                        )
+
+                        if addons_to_remove and addons_to_add:
+                            confirmation_messages.append(f"Replaced {', '.join(addons_to_remove)} with {', '.join(addons_to_add)} in Order ID {oid}.")
+                        elif addons_to_remove:
+                            confirmation_messages.append(f"Removed {', '.join(addons_to_remove)} from Order ID {oid}.")
+                        elif addons_to_add:
+                            confirmation_messages.append(f"Added {', '.join(addons_to_add)} to Order ID {oid}.")
+
+            if confirmation_messages:
+                # Clear the pending_action and reset session flags after successful modification
+                session.pop("pending_action", None)
+                session['is_fixing'] = False
+                session['missing_field_context'] = {}
+                # Update the session in the database
+                db.get_db()['Sessions'].replace_one({'session_id': session_id}, session, upsert=True)
+
+                return " ".join(confirmation_messages) + " Anything else I can help with?"
             else:
-                logger.debug(f"Order ID {oid} not found.")
+                return "No valid modifications were made to your order."
+        else:
+            # Set pending_action with the missing fields
+            session['pending_action'] = {
+                'action': 'modify_order',
+                'missing_fields': missing_fields,
+                'data': {
+                    'order_ids': order_ids,
+                    'modifications': modifications or {}
+                }
+            }
+            
+            # Create appropriate prompt based on missing fields
+            if 'order_id' in missing_fields and 'modifications' in missing_fields:
+                response = "Sure, which Order ID would you like to modify, and what changes would you like to make? ('cancel' to stop this request)"
+            elif 'order_id' in missing_fields:
+                response = "Sure, which Order ID would you like to modify? Please provide the Order ID. ('cancel' to stop this request)"
+            elif 'modifications' in missing_fields:
+                response = "What modifications would you like to make to your order? ('cancel' to stop this request)"
+            else:
+                response = "Please provide the necessary information to proceed with modifying your order."
 
-        if not valid_order_ids:
-            return "I couldn't find any valid Order IDs in your request."
-
-        # Proceed to update each valid order
-        confirmation_messages = []
-        for oid in valid_order_ids:
-            order = db.get_db().Orders.find_one({"session_id": session_id, "order_id": oid})
-            if not order:
-                continue  # Skip if order not found
-
-            # Iterate over each modification field
-            for field, addons in modifications.items():
-                existing_addons = order.get(field, [])
-                # Remove addons specified in modifications
-                addons_to_remove = [addon for addon in addons if addon in existing_addons]
-                # Add addons specified in modifications that aren't already present
-                addons_to_add = [addon for addon in addons if addon not in existing_addons]
-
-                if addons_to_remove:
-                    existing_addons = [addon for addon in existing_addons if addon not in addons_to_remove]
-                if addons_to_add:
-                    existing_addons.extend(addons_to_add)
-
-                # Update the order in the database
-                db.get_db().Orders.update_one(
-                    {"session_id": session_id, "order_id": oid},
-                    {"$set": {field: existing_addons}}
-                )
-
-                if addons_to_remove and addons_to_add:
-                    confirmation_messages.append(f"Replaced {', '.join(addons_to_remove)} with {', '.join(addons_to_add)} in Order ID {oid}.")
-                elif addons_to_remove:
-                    confirmation_messages.append(f"Removed {', '.join(addons_to_remove)} from Order ID {oid}.")
-                elif addons_to_add:
-                    confirmation_messages.append(f"Added {', '.join(addons_to_add)} to Order ID {oid}.")
-
-        if confirmation_messages:
-            # **Clear the pending_action and reset session flags after successful modification**
-            session.pop("pending_action", None)
-            session['is_fixing'] = False
-            session['missing_field_context'] = {}
-            # Update the session in the database
+            # Ensure that the session is updated in the database
             db.get_db()['Sessions'].replace_one({'session_id': session_id}, session, upsert=True)
 
-            return " ".join(confirmation_messages) + " Anything else I can help with?"
-        else:
-            return "No valid modifications were made to your order."
-    else:
-        # Set pending_action with the missing fields
-        session['pending_action'] = {
-            'action': 'modify_order',
-            'missing_fields': missing_fields,
-            'data': {
-                'order_ids': order_ids,
-                'modifications': modifications or {}  # Ensure modifications is a dict
-            }
-        }
-        # Create appropriate prompt based on missing fields
-        if 'order_id' in missing_fields and 'modifications' in missing_fields:
-            response = "Sure, which Order ID would you like to modify, and what changes would you like to make? ('cancel' to stop this request)"
-        elif 'order_id' in missing_fields:
-            response = "Sure, which Order ID would you like to modify? Please provide the Order ID. ('cancel' to stop this request)"
-        elif 'modifications' in missing_fields:
-            response = "What modifications would you like to make to your order? ('cancel' to stop this request)"
-        else:
-            response = "Please provide the necessary information to proceed with modifying your order."
-
-        # **Ensure that the session is updated in the database**
-        db.get_db()['Sessions'].replace_one({'session_id': session_id}, session, upsert=True)
-
-        return response
+            return response
+            
+    except Exception as e:
+        logger.exception(f"Error in handle_modify_order: {str(e)}")
+        return "Sorry, there was an error processing your modification request. Please try again."
 
 # Mapping of intent tags to handler functions
 intent_handlers = {
@@ -1241,7 +1371,7 @@ def chat():
             update_session(sessions_collection, session, session_id)
             return jsonify({"response": "\n".join(responses), "session_id": session_id})
 
-    # Predict intent (but don't act on it yet)
+    # Predict intent
     predicted_tag, confidence = predict_intent(sentence)
 
     if DEBUG:
@@ -1268,7 +1398,7 @@ def chat():
         update_session(sessions_collection, session, session_id)
         return jsonify({"response": "\n".join(responses), "session_id": session_id})
 
-    # NEW LOGIC: Check if we're in fixing mode (filling addons)
+    # Check if we're in fixing mode (filling addons)
     if is_fixing and missing_field_context:
         field = missing_field_context.get("field")
         order_id = missing_field_context.get("order_id")
@@ -1278,18 +1408,20 @@ def chat():
         
         if success:
             # Successfully found addon(s), update the order
-            response = update_order(session_id, order_id, field, values)
-            responses.append(response)
+            update_message, was_updated = update_order(session_id, order_id, field, values)
+            responses.append(update_message)
             
-            # Check for any remaining missing fields
-            missing_fields_response = check_missing_fields(session)
-            if missing_fields_response:
-                responses.append(missing_fields_response)
-
-
-        # Update session data and return
+            if was_updated:
+                # Only check for missing fields if the update was successful
+                missing_fields_response = check_missing_fields(session)
+                if missing_fields_response:
+                    responses.append(missing_fields_response)
+                else:
+                    # Order is complete
+                    order = db.get_db().Orders.find_one({"session_id": session_id, "order_id": order_id})
+                    if order and order.get("completed"):
+                        responses.append("Your order is complete! Would you like anything else?")
             
-        # Update session data and return
             update_session(sessions_collection, session, session_id)
             return jsonify({"response": "\n".join(responses), "session_id": session_id})
 
@@ -1323,7 +1455,15 @@ def chat():
         if missing_fields_response:
             responses.append(missing_fields_response)
         else:
-            responses.append("Anything else I can help with?")
+            order = db.get_db().Orders.find_one(
+                {"session_id": session_id},
+                sort=[("_id", -1)]
+            )
+            if order and order.get("completed"):
+                responses.append("Your order is complete! Would you like anything else?")
+            else:
+                responses.append("Anything else I can help with?")
+
     elif confidence == "medium":
         # Moderate confidence: ask for confirmation
         responses.append(f"I think you want to {predicted_tag.replace('_', ' ')}. Is that correct?")
