@@ -301,7 +301,8 @@ def extract_field_value(field, user_input):
     elif field == "toppings":
         patterns = [nlp.make_doc(text) for text in toppings]
     else:
-        return None
+        return None, False
+        
     matcher.add("FIELD_VALUE", patterns)
 
     doc = nlp(user_input)
@@ -309,6 +310,7 @@ def extract_field_value(field, user_input):
         logger.debug(f"Field: {field}")
         logger.debug(f"Patterns: {[pattern.text for pattern in patterns]}")
         logger.debug(f"User Input: {user_input}")
+    
     matches = matcher(doc)
     if matches:
         # Collect all matching phrases
@@ -318,11 +320,11 @@ def extract_field_value(field, user_input):
             values.add(span.text.lower())
         if DEBUG:
             logger.debug(f"Matches found: {values}")
-        return list(values)
+        return list(values), True
     else:
         if DEBUG:
             logger.debug("No matches found.")
-        return None
+        return None, False
 
 # Function to extract menu items using PhraseMatcher
 def extract_menu_items(user_input):
@@ -1216,7 +1218,7 @@ def chat():
 
     responses = []
 
-    # Check if the user input is 'cancel' before predicting intents
+    # Handle 'cancel' command first
     if cleaned_sentence == "cancel":
         if session.get("pending_action"):
             # Clear the pending action and reset session flags
@@ -1231,9 +1233,6 @@ def chat():
             missing_fields_response = check_missing_fields(session)
             if missing_fields_response:
                 responses.append(missing_fields_response)
-            #else:
-            #    responses.append("Anything else I can help with?")
-            # Update session data and return
             update_session(sessions_collection, session, session_id)
             return jsonify({"response": "\n".join(responses), "session_id": session_id})
         else:
@@ -1242,13 +1241,13 @@ def chat():
             update_session(sessions_collection, session, session_id)
             return jsonify({"response": "\n".join(responses), "session_id": session_id})
 
-    # Predict intent
+    # Predict intent (but don't act on it yet)
     predicted_tag, confidence = predict_intent(sentence)
 
     if DEBUG:
         logger.debug(f"Predicted intent: {predicted_tag}, Confidence: {confidence}")
 
-    # Handle pending actions (modify_order or remove_order)
+    # Handle pending actions first
     if session.get("pending_action"):
         # Existing pending action
         pending_action = session.get("pending_action")
@@ -1261,42 +1260,54 @@ def chat():
         elif action_type == "remove_order":
             response = handle_remove_order(session_id, session, sentence)
             responses.append(response)
-        # Add other action_types if necessary
 
-        # After handling, check for missing fields
         missing_fields_response = check_missing_fields(session)
         if missing_fields_response:
             responses.append(missing_fields_response)
-        #else:
-        #    responses.append("Anything else I can help with?")
 
-        # Update session data and return
         update_session(sessions_collection, session, session_id)
         return jsonify({"response": "\n".join(responses), "session_id": session_id})
 
-    # Define interrupt intents
+    # NEW LOGIC: Check if we're in fixing mode (filling addons)
+    if is_fixing and missing_field_context:
+        field = missing_field_context.get("field")
+        order_id = missing_field_context.get("order_id")
+        
+        # Try to extract addon value first
+        values, success = extract_field_value(field, sentence)
+        
+        if success:
+            # Successfully found addon(s), update the order
+            response = update_order(session_id, order_id, field, values)
+            responses.append(response)
+            
+            # Check for any remaining missing fields
+            missing_fields_response = check_missing_fields(session)
+            if missing_fields_response:
+                responses.append(missing_fields_response)
+
+
+        # Update session data and return
+            
+        # Update session data and return
+            update_session(sessions_collection, session, session_id)
+            return jsonify({"response": "\n".join(responses), "session_id": session_id})
+
+    # If we're here, either we're not fixing addons or addon extraction failed
+    # Now handle interrupt intents
     interrupt_intents = ["remove_order", "modify_order", "restart_order", "show_menu", "check_order", "ask_options", "reset_order"]
 
-    # Function to check if the user's input is an interrupt
-    def is_interrupt(sentence):
-        if predicted_tag in interrupt_intents and confidence != "low":
-            return predicted_tag
-        else:
-            return None
-
-    # Handle interrupt intents
-    interrupt_tag = is_interrupt(sentence)
-    if interrupt_tag:
-        handler_function = intent_handlers.get(interrupt_tag, intent_handlers["fallback"])
+    if predicted_tag in interrupt_intents and confidence != "low":
+        handler_function = intent_handlers.get(predicted_tag, intent_handlers["fallback"])
         response = handler_function(session_id, session, sentence)
         responses.append(response)
-        # After handling interrupt, check if there are missing fields
+        
         missing_fields_response = check_missing_fields(session)
         if missing_fields_response:
             responses.append(missing_fields_response)
         else:
             responses.append("Anything else I can help with?")
-        # Update session data
+            
         update_session(sessions_collection, session, session_id)
         return jsonify({"response": "\n".join(responses), "session_id": session_id})
 
