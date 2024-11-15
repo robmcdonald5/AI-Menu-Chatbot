@@ -271,30 +271,60 @@ def fetch_menu_data():
     all_items_cursor = menu_item_collection.find({})
     all_items = list(all_items_cursor)
 
-    # Build the menu dictionary with item details
+    # Build the menu dictionary with item details and colloquialisms
     menu = {}
+    name_to_colloquial = {}  # Mapping of colloquialisms to official names
+    
     for item in all_items:
         name = item['name'].lower()
         price = item['size_details'][0].get('price', 0) if 'size_details' in item and item['size_details'] else 0
         category = item.get('category', 'other')
+        colloquial = item.get('colloquialism', '').lower() if item.get('colloquialism') else None
+        
         if isinstance(category, list):
             category = [c.lower() for c in category]
         elif isinstance(category, str):
             category = category.lower()
         else:
             category = 'other'
+
+        # Add the main item name
         menu[name] = {
             'price': price,
             'category': category
         }
 
+        # Add colloquialism mapping if it exists
+        if colloquial:
+            name_to_colloquial[colloquial] = name
+            menu[colloquial] = menu[name]  # Share the same menu entry
+
     logger.debug(f"Loaded {len(menu)} menu items.")
 
-    # Fetch addons and normalize names to lowercase
-    meats = [item['name'].lower() for item in menu_item_collection.find({'category': {'$regex': '^protein$', '$options': 'i'}})]
-    rice = [item['name'].lower() for item in menu_item_collection.find({'category': {'$regex': '^rice$', '$options': 'i'}})]
-    beans = [item['name'].lower() for item in menu_item_collection.find({'category': {'$regex': '^beans$', '$options': 'i'}})]
-    toppings = [item['name'].lower() for item in menu_item_collection.find({'category': {'$regex': '^toppings$', '$options': 'i'}})]
+    # Fetch addons with colloquialisms
+    meats = []
+    rice = []
+    beans = []
+    toppings = []
+
+    # Helper function to add items and their colloquialisms to appropriate lists
+    def add_to_category(item, category_list):
+        category_list.append(item['name'].lower())
+        if item.get('colloquialism'):
+            category_list.append(item['colloquialism'].lower())
+
+    # Fetch and process each category
+    for item in menu_item_collection.find({'category': {'$regex': '^protein$', '$options': 'i'}}):
+        add_to_category(item, meats)
+    
+    for item in menu_item_collection.find({'category': {'$regex': '^rice$', '$options': 'i'}}):
+        add_to_category(item, rice)
+    
+    for item in menu_item_collection.find({'category': {'$regex': '^beans$', '$options': 'i'}}):
+        add_to_category(item, beans)
+    
+    for item in menu_item_collection.find({'category': {'$regex': '^toppings$', '$options': 'i'}}):
+        add_to_category(item, toppings)
 
     logger.debug(f"Meats list: {meats}")
     logger.debug(f"Rice list: {rice}")
@@ -309,10 +339,10 @@ def fetch_menu_data():
 
     logger.debug(f"Main items: {main_items}")
 
-    return menu, meats, rice, beans, toppings, main_items
+    return menu, meats, rice, beans, toppings, main_items, name_to_colloquial
 
 # Initial fetch of menu data
-menu, meats, rice, beans, toppings, main_items = fetch_menu_data()
+menu, meats, rice, beans, toppings, main_items, name_to_colloquial = fetch_menu_data()
 
 # Initialize the MenuFuzzer with menu data
 fuzzer = MenuFuzzer(menu_items=main_items, meats=meats, rice=rice, beans=beans, toppings=toppings, debug=DEBUG)
@@ -374,16 +404,17 @@ def extract_field_value(field, user_input):
     user_input_lower = user_input.lower()
     if user_input_lower in ["none", "no", "nothing", "skip"]:
         return ["none"], True
-        
+    
     # Add field-specific patterns
+    patterns = []
     if field == "meats":
-        patterns = [nlp.make_doc(text) for text in meats + ["none"]]
+        patterns = [nlp.make_doc(text) for text in meats]
     elif field == "rice":
-        patterns = [nlp.make_doc(text) for text in rice + ["none"]]
+        patterns = [nlp.make_doc(text) for text in rice]
     elif field == "beans":
-        patterns = [nlp.make_doc(text) for text in beans + ["none"]]
+        patterns = [nlp.make_doc(text) for text in beans]
     elif field == "toppings":
-        patterns = [nlp.make_doc(text) for text in toppings + ["none"]]
+        patterns = [nlp.make_doc(text) for text in toppings]
     else:
         return None, False
         
@@ -402,10 +433,18 @@ def extract_field_value(field, user_input):
         for match_id, start, end in matches:
             span = doc[start:end]
             value = span.text.lower()
+            
+            # If the matched text is a colloquialism, get the official name
+            official_name = name_to_colloquial.get(value)
+            if official_name and official_name != value:
+                value = official_name
+                
             # If "none" is selected, it should be the only value
             if value == "none":
                 return ["none"], True
+                
             values.add(value)
+            
         if DEBUG:
             logger.debug(f"Matches found: {values}")
         return list(values), True
@@ -446,6 +485,12 @@ def process_order_spacy(session_id, input_sentence):
         # Extract add-ons only if a main item is present in the segment
         if main_items_in_seg:
             main_item = main_items_in_seg[0]
+            
+            # If main_item is a colloquialism, get the official name
+            official_name = name_to_colloquial.get(main_item)
+            if official_name:
+                main_item = official_name
+                
             items.append(main_item)
 
             # Use the single addon_matcher to find all add-ons
@@ -454,10 +499,14 @@ def process_order_spacy(session_id, input_sentence):
                 span = doc[start:end]
                 category = nlp.vocab.strings[match_id]  # Retrieve the category label
                 addon = span.text.lower()
+                
+                # Convert colloquialism to official name if necessary
+                official_addon = name_to_colloquial.get(addon, addon)
+                
                 # Map the category label back to lowercase for consistency
                 category_key = category.lower()
-                if addon not in item_addons[main_item][category_key]:
-                    item_addons[main_item][category_key].append(addon)
+                if official_addon not in item_addons[main_item][category_key]:
+                    item_addons[main_item][category_key].append(official_addon)
 
     if DEBUG:
         logger.debug(f"Items extracted: {items}")
@@ -477,13 +526,6 @@ def process_order_spacy(session_id, input_sentence):
     # Fetch current max order_id
     last_order = db.get_db().Orders.find_one({"session_id": session_id}, sort=[("order_id", -1)])
     current_max_order_id = last_order["order_id"] if last_order else 0
-
-    # Define required_addons mapping
-    required_addons = {
-        'burrito': ['meats', 'rice', 'beans', 'toppings'],
-        'bowl': ['rice', 'beans', 'toppings'],
-        # Add other items as needed
-    }
 
     # Create and insert orders
     if items:
@@ -508,7 +550,7 @@ def process_order_spacy(session_id, input_sentence):
                     "order_id": order_id,
                     "item": item,
                     "price": price,
-                    "category": category_type,  # standardized category
+                    "category": category_type,
                     "completed": False
                 }
                 if category_type == "entree":
@@ -516,7 +558,6 @@ def process_order_spacy(session_id, input_sentence):
                     order_document["rice"] = item_addons[item]["rice"] if item_addons[item]["rice"] else []
                     order_document["beans"] = item_addons[item]["beans"] if item_addons[item]["beans"] else []
                     order_document["toppings"] = item_addons[item]["toppings"] if item_addons[item]["toppings"] else []
-                # Non-entrees do not have add-ons
 
                 orders_to_insert.append(order_document)
 

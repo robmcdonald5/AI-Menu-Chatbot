@@ -55,7 +55,7 @@ WEIGHT_JACCARD = 0.2
 FIELD_PROMPTS = {
     "meats": "What kind of meat would you like?",
     "rice": "What type of rice would you like?",
-    "beans": "Would you like black beans, pinto beans, or none?",
+    "beans": "What type of beans would you like?",
     "toppings": "What toppings would you like?"
 }
 
