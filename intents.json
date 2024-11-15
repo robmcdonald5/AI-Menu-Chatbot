@@ -141,25 +141,13 @@
     {
       "tag": "remove_order",
       "patterns": [
-        "I want to remove an item",
-        "Can I delete an item",
-        "Please remove something",
-        "I need to cancel an item",
-        "Take an item off my order",
-        "Remove an item from my order",
-        "Delete an item",
-        "I want to cancel something",
-        "I want to remove",
-        "Can you remove",
-        "Delete from my order",
+        "Remove my order",
         "Get rid of",
-        "Please delete",
-        "Remove order ID",
-        "Delete order number",
-        "Cancel item with ID",
-        "Remove the second item",
-        "Delete burrito from my order",
-        "Take out the salad I ordered"
+        "Get rid of my",
+        "Remove the",
+        "Delete the",
+        "Get rid of the",
+        "Take out the"
       ],
       "responses": [
         "Sure, which item would you like to remove?",
@@ -170,22 +158,11 @@
     {
       "tag": "modify_order",
       "patterns": [
-        "I need to change my order",
-        "Can I modify my order",
-        "I want to update my order",
-        "I made a mistake in my order",
-        "I want to edit my order",
-        "Change something in my order",
-        "I want to adjust my order",
-        "Can I alter my order",
-        "Modify my order",
-        "Update my order details",
-        "Change the second item in my order",
-        "Edit the toppings on my burrito",
-        "Adjust the quantity of bowls",
-        "I want to add more to my bowl",
-        "Change my order",
-        "Swap the with the"
+        "Modify my",
+        "Swap out the",
+        "Change out the",
+        "Change the for the",
+        "Swap the for the"
       ],
       "responses": [
         "Sure, what changes would you like to make?",
