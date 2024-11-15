@@ -11,4 +11,3 @@ flask_cors
 waitress
 word2number
 Levenshtein
-logging

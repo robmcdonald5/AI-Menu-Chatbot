@@ -10,8 +10,8 @@ DEBUG = True  # Set to False in production
 # CORS Configuration
 # ------------------------------
 CORS_ORIGINS = [
-    "http://localhost:5001",
-    # "https://chipotleaimenu.app"  # Uncomment this line for production
+    #"http://localhost:5001",
+    "https://chipotleaimenu.app"  # Uncomment this line for production
 ]
 
 # ------------------------------

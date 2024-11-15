@@ -1287,8 +1287,8 @@ def get_order():
 
 @app.route('/chat', methods=['POST', 'OPTIONS'])
 def chat():
-    if request.method == 'OPTIONS':
-        return _build_cors_preflight_response()
+    #if request.method == 'OPTIONS':
+    #    return _build_cors_preflight_response()
     
     try:
         data = request.json
@@ -1515,18 +1515,18 @@ def chat():
     update_session(sessions_collection, session, session_id)
     return jsonify({"response": "\n".join(responses), "session_id": session_id})
 
-def _build_cors_preflight_response():
-    response = jsonify({'status': 'OK'})
-    response.headers.add("Access-Control-Allow-Origin", "http://localhost:5001")
-    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
-    return response
+#def _build_cors_preflight_response():
+#    response = jsonify({'status': 'OK'})
+#    response.headers.add("Access-Control-Allow-Origin", "http://localhost:5001")
+#    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+#    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+#    response.headers.add('Access-Control-Allow-Credentials', 'true')
+#    return response
 
-def _corsify_actual_response(response):
-    response.headers.add("Access-Control-Allow-Origin", "http://localhost:5001")
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
-    return response
+#def _corsify_actual_response(response):
+#    response.headers.add("Access-Control-Allow-Origin", "http://localhost:5001")
+#    response.headers.add('Access-Control-Allow-Credentials', 'true')
+#   return response
 
 # Serve React frontend
 @app.route('/')
@@ -1542,6 +1542,6 @@ def serve_static(path):
         return send_from_directory(app.static_folder, 'index.html')
 
 ## Uncomment the following lines if you want to run the Flask app locally
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=DEBUG)
+#if __name__ == '__main__':
+#    port = int(os.environ.get("PORT", 5000))
+#    app.run(host='0.0.0.0', port=port, debug=DEBUG)
