@@ -811,6 +811,14 @@ def get_order():
         logger.debug(order_details)
     return jsonify({"order_details": order_details})
 
+@app.route('/get_menu_items', methods=['GET'])
+def get_menu_items():
+    menu_items = list(db.get_db().MenuItem.find({}, {"name": 1, "category": 1, "_id": 0}))
+
+    if DEBUG:
+        logger.debug(menu_items)
+    return jsonify({"menu_items": menu_items})
+
 @app.route('/chat', methods=['POST', 'OPTIONS'])
 def chat():
     if request.method == 'OPTIONS':

@@ -2,7 +2,9 @@
 module.exports = {
   content: ["./src/**/*.{js,jsx,ts,tsx}"],
   theme: {
-    extend: {},
+    extend: {
+      raleway: ["Raleway", "sans-serif"],
+    },
   },
   plugins: [require("tailwindcss-hero-patterns")],
 };
