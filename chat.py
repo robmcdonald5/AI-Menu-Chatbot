@@ -959,6 +959,120 @@ def determine_field(addon):
                     closest_match = category
         
         return closest_match
+    
+def get_nutrition_info(session_id, session, sentence):
+    if DEBUG:
+        logger.debug(f"Processing nutrition info request for sentence: '{sentence}'")
+        logger.debug(f"Current menu_matcher patterns: {[p.text for p in menu_patterns]}")
+        logger.debug(f"Available items in menu: {main_items}")
+        logger.debug(f"Available addon items: {addons_list}")
+
+    # Extract mentioned menu items
+    doc = nlp(sentence)
+    if DEBUG:
+        logger.debug(f"SpaCy doc tokens: {[token.text for token in doc]}")
+    
+    # Try to match both menu items and addons
+    menu_matches = menu_matcher(doc)
+    addon_matches = addon_matcher(doc)
+    
+    if DEBUG:
+        logger.debug(f"Menu matcher matches: {[(doc[start:end].text, start, end) for _, start, end in menu_matches]}")
+        logger.debug(f"Addon matcher matches: {[(doc[start:end].text, start, end) for _, start, end in addon_matches]}")
+
+    mentioned_items = set()
+    
+    # Add main menu items
+    for match_id, start, end in menu_matches:
+        span = doc[start:end]
+        item_name = span.text.lower()
+        if DEBUG:
+            logger.debug(f"Found main menu item: {item_name}")
+        
+        # If the item is a colloquialism, get the official name
+        official_name = name_to_colloquial.get(item_name, item_name)
+        if DEBUG:
+            logger.debug(f"Official name for {item_name}: {official_name}")
+        mentioned_items.add(official_name)
+    
+    # Add addon items (like meats, rice, etc.)
+    for match_id, start, end in addon_matches:
+        span = doc[start:end]
+        item_name = span.text.lower()
+        category = nlp.vocab.strings[match_id].lower()
+        if DEBUG:
+            logger.debug(f"Found addon item: {item_name} from category: {category}")
+        
+        # If the item is a colloquialism, get the official name
+        official_name = name_to_colloquial.get(item_name, item_name)
+        if DEBUG:
+            logger.debug(f"Official name for addon {item_name}: {official_name}")
+        mentioned_items.add(official_name)
+
+    if DEBUG:
+        logger.debug(f"Final mentioned items after processing: {mentioned_items}")
+    
+    if not mentioned_items:
+        return "I couldn't identify which menu item you'd like nutritional information for. Could you please specify the item?"
+    
+    responses = []
+    
+    # Query each mentioned item
+    for item_name in mentioned_items:
+        if DEBUG:
+            logger.debug(f"Querying MenuItem collection for: {item_name}")
+            
+        # First get the MenuItem document to get its ID
+        # Try exact match first
+        menu_item = db.get_db().MenuItem.find_one({"name": {"$regex": f"^{item_name}$", "$options": "i"}})
+        
+        # If no exact match, try matching as an ingredient/addon
+        if not menu_item:
+            menu_item = db.get_db().MenuItem.find_one({
+                "$or": [
+                    {"category": "protein", "name": {"$regex": f"^{item_name}$", "$options": "i"}},
+                    {"category": "rice", "name": {"$regex": f"^{item_name}$", "$options": "i"}},
+                    {"category": "beans", "name": {"$regex": f"^{item_name}$", "$options": "i"}},
+                    {"category": "toppings", "name": {"$regex": f"^{item_name}$", "$options": "i"}}
+                ]
+            })
+        
+        if DEBUG:
+            logger.debug(f"MenuItem query result for {item_name}: {menu_item}")
+        
+        if not menu_item:
+            responses.append(f"Sorry, I couldn't find nutritional information for {item_name}.")
+            continue
+        
+        # Get nutritional information using the menuitem ID
+        nutrition_info = db.get_db().NutritionalInformation.find_one({"menuitemID": menu_item['_id']})
+        
+        if DEBUG:
+            logger.debug(f"NutritionalInformation query result for {item_name}: {nutrition_info}")
+        
+        if not nutrition_info:
+            responses.append(f"Sorry, nutritional information for {item_name} is not available at the moment.")
+            continue
+        
+        # Format the nutritional information
+        nutrition_text = f"\nNutritional Information for {item_name.capitalize()}:\n"
+        nutrition_text += f"• Calories: {nutrition_info['total_calories']}\n"
+        nutrition_text += f"• Fat: {nutrition_info['total_fat']}g (Calories from Fat: {nutrition_info['total_fat_calories']})\n"
+        nutrition_text += f"  - Saturated Fat: {nutrition_info['saturated_fat']}g\n"
+        nutrition_text += f"  - Trans Fat: {nutrition_info['trans_fat']}g\n"
+        nutrition_text += f"• Cholesterol: {nutrition_info['cholesterol']}mg\n"
+        nutrition_text += f"• Sodium: {nutrition_info['sodium']}mg\n"
+        nutrition_text += f"• Total Carbohydrates: {nutrition_info['carbohydrates']}g\n"
+        nutrition_text += f"  - Dietary Fiber: {nutrition_info['dietary_fiber']}g\n"
+        nutrition_text += f"  - Sugars: {nutrition_info['sugars']}g\n"
+        nutrition_text += f"• Protein: {nutrition_info['protein']}g"
+        
+        responses.append(nutrition_text)
+    
+    if not responses:
+        return "I couldn't find any nutritional information. Could you please specify which menu item you're interested in?"
+    
+    return "\n".join(responses)
 
 def extract_modifications(user_input):
     modifications = defaultdict(list)
@@ -1236,6 +1350,7 @@ intent_handlers = {
     "restart_order": handle_remove_order,  # If restart_order uses the same handler
     "show_menu": check_menu,
     "ask_options": provide_options,
+    "nutrition_info": get_nutrition_info,
     "vegan_options": lambda sid, s, sen: random.choice(intents_dict['vegan_options']['responses']),
     "fallback": lambda sid, s, sen: random.choice(intents_dict['fallback']['responses'])
 }
@@ -1295,8 +1410,8 @@ def get_menu_items():
 
 @app.route('/chat', methods=['POST', 'OPTIONS'])
 def chat():
-    #if request.method == 'OPTIONS':
-    #    return _build_cors_preflight_response()
+    if request.method == 'OPTIONS':
+        return _build_cors_preflight_response()
     
     try:
         data = request.json
@@ -1476,7 +1591,7 @@ def chat():
 
     # If we're here, either we're not fixing addons or addon extraction failed
     # Now handle interrupt intents
-    interrupt_intents = ["remove_order", "modify_order", "restart_order", "show_menu", "check_order", "ask_options", "reset_order"]
+    interrupt_intents = ["remove_order", "modify_order", "restart_order", "show_menu", "check_order", "ask_options", "reset_order", "nutrition_info"]
 
     if predicted_tag in interrupt_intents and confidence != "low":
         handler_function = intent_handlers.get(predicted_tag, intent_handlers["fallback"])
@@ -1523,18 +1638,18 @@ def chat():
     update_session(sessions_collection, session, session_id)
     return jsonify({"response": "\n".join(responses), "session_id": session_id})
 
-#def _build_cors_preflight_response():
-#    response = jsonify({'status': 'OK'})
-#    response.headers.add("Access-Control-Allow-Origin", "http://localhost:5001")
-#    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-#    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-#    response.headers.add('Access-Control-Allow-Credentials', 'true')
-#    return response
+def _build_cors_preflight_response():
+    response = jsonify({'status': 'OK'})
+    response.headers.add("Access-Control-Allow-Origin", "http://localhost:5001")
+    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
 
-#def _corsify_actual_response(response):
-#    response.headers.add("Access-Control-Allow-Origin", "http://localhost:5001")
-#    response.headers.add('Access-Control-Allow-Credentials', 'true')
-#   return response
+def _corsify_actual_response(response):
+    response.headers.add("Access-Control-Allow-Origin", "http://localhost:5001")
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
 
 # Serve React frontend
 @app.route('/')
@@ -1550,6 +1665,6 @@ def serve_static(path):
         return send_from_directory(app.static_folder, 'index.html')
 
 ## Uncomment the following lines if you want to run the Flask app locally
-#if __name__ == '__main__':
-#    port = int(os.environ.get("PORT", 5000))
-#    app.run(host='0.0.0.0', port=port, debug=DEBUG)
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=DEBUG)

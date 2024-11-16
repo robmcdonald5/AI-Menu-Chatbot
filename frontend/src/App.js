@@ -31,6 +31,7 @@ const OrderDetails = ({ orderDetails }) => {
 
   const imageSources = {
     bowl: bowl,
+    salad: bowl,
     burrito: burrito,
     taco: taco,
     quesadilla: quesadilla,
@@ -108,7 +109,7 @@ function App() {
   useEffect(() => {
     const fetchMenuItems = async () => {
       try {
-        const response = await axios.get('http://localhost:5000/get_menu_items');
+        const response = await axios.get(`${baseURL}/get_menu_items`);
         setMenuItems(response.data.menu_items);
       } catch (error) {
         console.error('Error fetching menu items:', error);

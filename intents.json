@@ -286,6 +286,31 @@
       ]
     },
     {
+      "tag": "nutrition_info",
+      "patterns": [
+        "What are the nutrition facts for",
+        "Tell me the nutritional information for",
+        "What's the calorie count for",
+        "How many calories in",
+        "What's the nutrition info for",
+        "Show me the nutrition facts for",
+        "Can I see the nutrition facts for",
+        "Get me the nutrition information for",
+        "What are the macros for",
+        "Show nutritional data for",
+        "How healthy is",
+        "What's the protein content in",
+        "How many carbs in",
+        "Tell me the fat content of",
+        "Nutrition details for"
+      ],
+      "responses": [
+        "Here's the nutritional information: [nutrition_details]",
+        "Let me fetch those nutrition facts for you: [nutrition_details]",
+        "Here are the nutrition facts: [nutrition_details]"
+      ]
+    },
+    {
       "tag": "checkout",
       "patterns": [
         "I'm ready to checkout",
