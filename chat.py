@@ -877,16 +877,56 @@ def process_order(session_id, session, sentence):
     return response
 
 def checkout_order(session_id, session, sentence):
-    # Delete the session's orders
+    # Get all orders for the session
+    orders = list(db.get_db().Orders.find({"session_id": session_id}))
+    
+    if not orders:
+        return "Your order is empty. Would you like to place an order?"
+    
+    # Calculate total cost and prepare order summary
+    total_cost = 0
+    order_summary = []
+    
+    for order in orders:
+        item_name = order['item'].capitalize()
+        price = order.get('price', 0)
+        total_cost += price
+        
+        # Build order details string
+        details = [item_name]
+        if order.get('category') == 'entree':
+            if order.get('meats'):
+                details.append(f"with {', '.join(order['meats'])}")
+            if order.get('rice'):
+                details.append(f"{', '.join(order['rice'])}")
+            if order.get('beans'):
+                details.append(f"{', '.join(order['beans'])}")
+            if order.get('toppings'):
+                details.append(f"topped with {', '.join(order['toppings'])}")
+        
+        order_summary.append(f"• {' '.join(details)} (${price:.2f})")
+    
+    # Build the completion message
+    completion_message = [
+        "Thank you for your order! Here's your order summary:",
+        "",  # Empty line for spacing
+        *order_summary,  # Unpack the order details
+        "",  # Empty line for spacing
+        f"Total Cost: ${total_cost:.2f}",
+        "",
+        "Your order has been processed and will be ready for pickup soon!"
+    ]
+    
+    # Delete the orders after successful checkout
     db.get_db().Orders.delete_many({"session_id": session_id})
-    if DEBUG:
-        logger.debug(f"Orders for session {session_id} have been deleted upon checkout.")
+    
     # Reset session data
     session['is_fixing'] = False
     session['missing_field_context'] = {}
     session['chat_length'] = 0
     session['last_activity'] = datetime.now(timezone.utc)
-    return "Your order is complete and has been submitted. Thank you!"
+    
+    return "\n".join(completion_message)
 
 def check_order(session_id, session, sentence):
     return display_current_order(session_id)
