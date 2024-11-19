@@ -44,7 +44,25 @@ EXTERNAL_LOGGERS = [
 SIMILARITY_THRESHOLD_HIGH = 0.7  # High confidence
 SIMILARITY_THRESHOLD_MEDIUM = 0.45  # Medium confidence
 
-# Similarity Weights
+# Confidence margin for comparing top matches
+CONFIDENCE_MARGIN = 0.1  # If top 2 scores are within this margin, reduce confidence
+
+# Weights for different input lengths
+SHORT_INPUT_WEIGHTS = {
+    'cosine': 0.4,
+    'euclidean': 0.1,
+    'jaccard': 0.4,
+    'wmd': 0.1
+}
+
+LONG_INPUT_WEIGHTS = {
+    'cosine': 0.3,
+    'euclidean': 0.2,
+    'jaccard': 0.2,
+    'wmd': 0.3
+}
+
+# Legacy weights (kept for backward compatibility)
 WEIGHT_COSINE = 0.5
 WEIGHT_EUCLIDEAN = 0.3
 WEIGHT_JACCARD = 0.2
@@ -72,7 +90,7 @@ INACTIVITY_TIMEOUT_MINUTES = 5
 # ------------------------------
 # Model Configuration
 # ------------------------------
-SPACY_MODEL = 'en_core_web_sm'
+SPACY_MODEL = 'en_core_web_md'
 SENTENCE_MODEL = 'all-mpnet-base-v2'
 
 # ------------------------------

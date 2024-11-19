@@ -87,8 +87,6 @@ field_prompts = config.FIELD_PROMPTS
 
 bot_name = config.BOT_NAME
 
-logger.info(f"Hi, I am an automated {config.BOT_NAME} AI menu. What would you like to order! (type 'quit' to exit)")
-
 # Function to clean sentences
 def clean_sentence(sentence):
     sentence = sentence.lower()
@@ -786,48 +784,67 @@ def predict_intent(user_input):
     cleaned_input = clean_sentence(user_input)
     input_embedding = sentence_model.encode([cleaned_input])[0]
 
-    # Compute Cosine Similarity
+    # Cosine Similarity
     cosine_similarities = np.dot(pattern_embeddings, input_embedding) / (np.linalg.norm(pattern_embeddings, axis=1) * np.linalg.norm(input_embedding))
-
-    # Compute Euclidean Distance
+    
+    # Euclidean Distance
     euclidean_distances = np.linalg.norm(pattern_embeddings - input_embedding, axis=1)
-
-    # Compute Jaccard Similarity
+    
+    # Jaccard Similarity
     input_tokens = set(cleaned_input.split())
     jaccard_similarities = np.array([
         len(input_tokens.intersection(set(pattern.split()))) / len(input_tokens.union(set(pattern.split()))) 
         if len(input_tokens.union(set(pattern.split()))) > 0 else 0 
         for pattern in all_patterns
     ])
+    
+    # Word Mover's Distance (using SpaCy)
+    wmd_distances = np.array([
+        nlp(cleaned_input).similarity(nlp(pattern))
+        for pattern in all_patterns
+    ])
+    
+    # Normalize all metrics to [0,1] range
+    scaler = MinMaxScaler()
+    normalized_euclidean = scaler.fit_transform(euclidean_distances.reshape(-1, 1)).flatten()
+    normalized_wmd = scaler.fit_transform(wmd_distances.reshape(-1, 1)).flatten()
+    
+    # Dynamic weight adjustment based on input length
+    input_length = len(cleaned_input.split())
+    if input_length <= 3:
+        weights = config.SHORT_INPUT_WEIGHTS
+    else:
+        weights = config.LONG_INPUT_WEIGHTS
 
-    # Normalize Euclidean Distances and Jaccard Similarities
-    scaler_euclidean = MinMaxScaler()
-    normalized_euclidean = scaler_euclidean.fit_transform(euclidean_distances.reshape(-1, 1)).flatten()
-    normalized_jaccard = jaccard_similarities  # Already in [0,1]
+    # Combine scores with weights
+    combined_scores = (
+        weights['cosine'] * cosine_similarities +
+        weights['euclidean'] * (1 - normalized_euclidean) +
+        weights['jaccard'] * jaccard_similarities +
+        weights['wmd'] * (1 - normalized_wmd)
+    )
 
-    # Combine similarities with weights
-    combined_scores = (WEIGHT_COSINE * cosine_similarities) + \
-                      (WEIGHT_EUCLIDEAN * (1 - normalized_euclidean)) + \
-                      (WEIGHT_JACCARD * normalized_jaccard)
-
-    # Find the best match
-    max_score_index = np.argmax(combined_scores)
-    max_score = combined_scores[max_score_index]
-    predicted_tag = pattern_tags[max_score_index]
+    # Get top 3 matches
+    top_indices = np.argsort(combined_scores)[-3:][::-1]
+    top_scores = combined_scores[top_indices]
+    top_tags = [pattern_tags[i] for i in top_indices]
 
     if DEBUG:
-        logger.debug(f"Max combined score: {max_score}, Predicted intent: {predicted_tag}")
+        logger.debug(f"Top 3 intents: {list(zip(top_tags, top_scores))}")
+        logger.debug(f"Input length: {input_length}, Using weights: {weights}")
 
-    # Determine intent based on combined score thresholds
-    if max_score >= SIMILARITY_THRESHOLD_HIGH:
-        confidence = "high"
-        return predicted_tag, confidence
-    elif SIMILARITY_THRESHOLD_MEDIUM <= max_score < SIMILARITY_THRESHOLD_HIGH:
+    # Use a voting system for confidence levels
+    if top_scores[0] >= SIMILARITY_THRESHOLD_HIGH:
+        if len(top_scores) > 1 and (top_scores[0] - top_scores[1]) < config.CONFIDENCE_MARGIN:
+            confidence = "medium"  # Close second match reduces confidence
+        else:
+            confidence = "high"
+    elif top_scores[0] >= SIMILARITY_THRESHOLD_MEDIUM:
         confidence = "medium"
-        return predicted_tag, confidence
     else:
         confidence = "low"
-        return None, confidence
+
+    return top_tags[0], confidence
 
 # Function to check missing fields and set slot-filling context
 def check_missing_fields(session):
@@ -1380,7 +1397,6 @@ def handle_modify_order(session_id, session, sentence):
 
 # Mapping of intent tags to handler functions
 intent_handlers = {
-    "goodbye": lambda sid, s, sen: random.choice(intents_dict['goodbye']['responses']),
     "order": process_order,
     "remove_order": handle_remove_order,
     "modify_order": handle_modify_order,
