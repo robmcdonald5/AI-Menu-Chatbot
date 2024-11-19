@@ -976,8 +976,43 @@ def restart_order(session_id, session, sentence):
     return "Your order has been reset. You can start a new order."
 
 def check_menu(session_id, session, sentence):
-    menu_items = ', '.join([item.capitalize() for item in main_items])
-    return f"Our main items are: {menu_items}"
+    # Get items from MenuItem collection
+    menu_items = db.get_db().MenuItem.find({})
+    
+    # Organize items by category
+    entree_items = set()
+    side_items = set()
+    
+    for item in menu_items:
+        # Handle both single category and list of categories
+        categories = item['category'] if isinstance(item['category'], list) else [item['category']]
+        name = item['name'].capitalize()
+        
+        # Check each category
+        if 'Main' in categories:
+            entree_items.add(name)
+        if 'OptionalSide' in categories:
+            side_items.add(name)
+    
+    # Sort items alphabetically
+    entree_items = sorted(list(entree_items))
+    side_items = sorted(list(side_items))
+    
+    # Build response message
+    response = []
+    
+    # Add Entree section
+    response.append("Entree Items:")
+    response.append("• " + "\n• ".join(entree_items) + ".")
+    
+    # Add spacing between sections
+    response.append("")  # Empty line for spacing
+    
+    # Add Sides section
+    response.append("Side Items:")
+    response.append("• " + "\n• ".join(side_items) + ".")
+    
+    return "\n".join(response)
 
 def provide_options(session_id, session, sentence):
     is_fixing = session.get("is_fixing", False)
