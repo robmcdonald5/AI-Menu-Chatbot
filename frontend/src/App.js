@@ -98,6 +98,10 @@ function App() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [menuItems, setMenuItems] = useState([]);
 
+  // State variables for recording
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef(null);
+
   // Initialize sessionId from localStorage when the component mounts
   useEffect(() => {
     const storedSessionId = localStorage.getItem("session_id");
@@ -196,6 +200,98 @@ function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Speech-to-Text Handlers
+  const handleMicClick = () => {
+    if (!isRecording) {
+      // Start recording
+      if (
+        !("webkitSpeechRecognition" in window) &&
+        !("SpeechRecognition" in window)
+      ) {
+        alert(
+          "Your browser does not support speech recognition. Please use Chrome or Edge."
+        );
+        return;
+      }
+
+      const SpeechRecognition =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+
+      recognition.lang = "en-US"; // Set the language
+      recognition.continuous = false; // To keep the recognition running until the user stops it manually, set (adds errors right now)
+      recognition.interimResults = false; // If you want to display speech recognition results as the user is speaking, set true (adds errors right now)
+
+      recognitionRef.current = recognition;
+
+      recognition.onstart = () => {
+        setIsRecording(true);
+      };
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        setIsRecording(false);
+
+        // Simulate the message sending process
+        const userMessage = { text: transcript, sender: "user" };
+        setMessages((prev) => [...prev, userMessage]);
+
+        // Process the transcribed input
+        processUserInput(transcript);
+      };
+
+      recognition.onerror = (event) => {
+        console.error("Speech recognition error", event.error);
+        setIsRecording(false);
+        alert("Speech recognition error: " + event.error);
+      };
+
+      recognition.onend = () => {
+        setIsRecording(false);
+      };
+
+      recognition.start();
+    } else {
+      // Stop recording
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+        setIsRecording(false);
+      }
+    }
+  };
+
+  const processUserInput = async (transcript) => {
+    if (!transcript.trim()) {
+      return; // Don't send empty messages
+    }
+
+    try {
+      // Prepare the data to send
+      const dataToSend = {
+        message: transcript,
+        session_id: sessionId, // Include session_id in the request
+      };
+
+      const response = await axios.post(`${baseURL}/chat`, dataToSend);
+
+      const gptMessage = { text: response.data.response, sender: "chipotle" };
+      setMessages((prev) => [...prev, gptMessage]);
+
+      // Store session_id from the response if it's a new session or updated
+      if (response.data.session_id && response.data.session_id !== sessionId) {
+        setSessionId(response.data.session_id);
+        localStorage.setItem("session_id", response.data.session_id);
+      }
+    } catch (error) {
+      console.error("Error sending message:", error);
+      const errorMessage = {
+        text: "Sorry, there was an error. Please try again.",
+        sender: "chipotle",
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    }
+  };
+
   return (
     <div className="h-screen relative">
       {/* Navbar */}
@@ -254,6 +350,19 @@ function App() {
           </div>
         </div>
         <form onSubmit={handleSubmit} className="flex">
+        <button
+            type="button"
+            onClick={handleMicClick}
+            className={`mr-2 p-0 ${
+              isRecording ? "bg-red-500 animate-pulse" : "bg-[#AC2318]"
+            } text-white rounded-full shadow-lg`}
+          >
+            <img
+              src="/mic-icon.png"
+              alt="Microphone Icon"
+              className="w-4 h-4 sm:w-8 sm:h-8 md:w-10 md:h-10 lg:w-12 lg:h-12"
+            />
+          </button>
           <input
             type="text"
             value={userInput}
