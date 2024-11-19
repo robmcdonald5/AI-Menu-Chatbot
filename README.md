@@ -24,7 +24,7 @@ The **AI Menu Chatbot** is an AI-powered application designed to replace convent
   - Browser-based voice recognition APIs (Google Text-to-Speech)
   
   ### Backend
-  - **Python**, **Torch**, **sentence-transformer**, **SpaCy**, **KMeans**
+  - **Python**, **BERT Sentence-Transformers**, **SpaCy**, **Flask**, **SKLearn**, **Levenshtein Fuzzer**
   - Deep learning model for intent recognition and menu interaction logic
 
 ### Database
@@ -33,13 +33,13 @@ The **AI Menu Chatbot** is an AI-powered application designed to replace convent
 ### Deployment
 - **Heroku** with Docker containerization
 
-### Contributing
-- Joshua: PM ()
-- Nikhil: Architect ()
-- Alex: Dev-Ops ()
-- Kevin: Dev-Ops ()
-- Azmair: QA ()
-- Ishan: QA ()
+### Contributors
+- Joshua: Project Manager
+- Nikhil: Architect
+- Alex: Dev-Ops
+- Kevin: Dev-Ops
+- Azmair: QA
+- Ishan: QA
 
 ### License
-- MIT GNE license
+- MIT permissive software license
