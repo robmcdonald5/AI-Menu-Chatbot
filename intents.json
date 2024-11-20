@@ -52,7 +52,17 @@
                 "I'd like to update my order.",
                 "Please add sour cream to my burrito.",
                 "Can I remove onions from my bowl?",
-                "I want to change the meat to steak."
+                "I want to change the meat to steak.",
+                "Replace the pinto beans in order 1 with black beans.",
+                "Swap the brown rice with white rice.",
+                "Change the rice to brown rice.",
+                "Modify order 2 to have chicken instead of steak.",
+                "Update my order to include guacamole.",
+                "I'd like to substitute black beans for pinto beans.",
+                "Switch the steak for chicken in my burrito.",
+                "I need to modify my order.",
+                "Remove the chicken in order 2.",
+                "I want to change the beans in my order."
             ],
             "responses": [
                 "Which order number would you like to modify?",
@@ -166,7 +176,17 @@
                 "Finish my order.",
                 "Let's checkout.",
                 "I want to pay now.",
-                "Ready to checkout."
+                "Ready to checkout.",
+                "That will be all.",
+                "I'm done.",
+                "That's it.",
+                "No more items.",
+                "I'm finished ordering.",
+                "No, that's everything.",
+                "I'm ready to pay.",
+                "Proceed to checkout.",
+                "Finish ordering.",
+                "Let's finalize the order."
             ],
             "responses": [
                 "Your order has been completed.",
