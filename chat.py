@@ -27,9 +27,6 @@ from connect import database as db  # Ensure connect.py is correctly set up with
 # Import the MenuFuzzer
 from fuzzer import MenuFuzzer  # Ensure fuzzer.py is in the same directory or in Python path
 
-# Import intent trainer
-from intent_trainer import IntentTrainer
-
 app = Flask(__name__, static_folder='frontend/build')  # Set static_folder to frontend/build
 
 # Updated CORS setup using config.py
@@ -1867,6 +1864,42 @@ def serve_static(path):
         return send_from_directory(app.static_folder, path)
     else:
         return send_from_directory(app.static_folder, 'index.html')
+    
+@app.route('/reset_session', methods=['POST'])
+def reset_session():
+    try:
+        data = request.get_json()
+        session_id = data.get('session_id')
+        
+        if not session_id:
+            logger.warning("reset_session called without session_id.")
+            return jsonify({"error": "session_id not provided."}), 400
+
+        # Access collections via db.get_db()
+        db_instance = db.get_db()
+        result_orders = db_instance.Orders.delete_many({"session_id": session_id})
+        result_sessions = db_instance.Sessions.delete_one({"session_id": session_id})
+
+        logger.info(f"Deleted {result_orders.deleted_count} orders and {result_sessions.deleted_count} sessions for session_id {session_id}.")
+
+        return jsonify({"status": "Session reset successfully."}), 200
+
+    except Exception as e:
+        logger.error(f"Error resetting session {session_id}: {e}")
+        return jsonify({"error": "Internal server error."}), 500
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    """
+    Health check endpoint to verify that the server is running.
+    """
+    try:
+        # You can add more comprehensive health checks here if needed
+        return jsonify({"status": "ok"}), 200
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return jsonify({"status": "error"}), 500
+
 
 ## Uncomment the following lines if you want to run the Flask app locally
 if __name__ == '__main__':
