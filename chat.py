@@ -27,6 +27,9 @@ from connect import database as db  # Ensure connect.py is correctly set up with
 # Import the MenuFuzzer
 from fuzzer import MenuFuzzer  # Ensure fuzzer.py is in the same directory or in Python path
 
+# Import intent trainer
+from intent_trainer import IntentTrainer
+
 app = Flask(__name__, static_folder='frontend/build')  # Set static_folder to frontend/build
 
 # Updated CORS setup using config.py
@@ -1182,6 +1185,93 @@ def get_nutrition_info(session_id, session, sentence):
     
     return "\n".join(responses)
 
+def check_price(session_id, session, sentence):
+    # Check if the user wants to cancel the price check action
+    if clean_sentence(sentence) == "cancel":
+        # Clear the pending_action and reset session flags
+        session.pop("pending_action", None)
+        session['is_fixing'] = False
+        session['missing_field_context'] = {}
+        # Update the session in the database
+        db.get_db()['Sessions'].replace_one({'session_id': session_id}, session, upsert=True)
+        logger.info(f"Session {session_id}: User canceled the price check action.")
+        return "Okay, I've canceled the price check request. How else can I assist you?"
+
+    # Use SpaCy to identify menu items in the sentence
+    doc = nlp(sentence)
+    items = set()
+    
+    # Check for main menu items
+    menu_matches = menu_matcher(doc)
+    for match_id, start, end in menu_matches:
+        span = doc[start:end]
+        item_name = span.text.lower()
+        # If the item is a colloquialism, get the official name
+        official_name = name_to_colloquial.get(item_name, item_name)
+        items.add(official_name)
+    
+    # Also check for add-on items
+    addon_matches = addon_matcher(doc)
+    for match_id, start, end in addon_matches:
+        span = doc[start:end]
+        item_name = span.text.lower()
+        # If the item is a colloquialism, get the official name
+        official_name = name_to_colloquial.get(item_name, item_name)
+        items.add(official_name)
+
+    if DEBUG:
+        logger.debug(f"Items found for price check: {items}")
+
+    if not items:
+        # No items found, set pending action
+        session['pending_action'] = {
+            'action': 'check_price',
+            'missing_fields': ['item'],
+            'data': {}
+        }
+        # Update the session in the database
+        db.get_db()['Sessions'].replace_one({'session_id': session_id}, session, upsert=True)
+        return "Which item would you like to know the price for? ('cancel' to stop this request)"
+
+    # If we found items, look up their prices
+    price_responses = []
+    for item_name in items:
+        # Query the MenuItem collection
+        menu_item = db.get_db().MenuItem.find_one(
+            {"name": {"$regex": f"^{item_name}$", "$options": "i"}}
+        )
+        
+        if not menu_item:
+            # Try matching as an ingredient/addon
+            menu_item = db.get_db().MenuItem.find_one({
+                "$or": [
+                    {"category": "protein", "name": {"$regex": f"^{item_name}$", "$options": "i"}},
+                    {"category": "rice", "name": {"$regex": f"^{item_name}$", "$options": "i"}},
+                    {"category": "beans", "name": {"$regex": f"^{item_name}$", "$options": "i"}},
+                    {"category": "toppings", "name": {"$regex": f"^{item_name}$", "$options": "i"}}
+                ]
+            })
+
+        if menu_item:
+            # Get the base price from size_details
+            if 'size_details' in menu_item and menu_item['size_details']:
+                base_price = menu_item['size_details'][0].get('price', 0)
+                if base_price > 0:  # Only show price if it's greater than 0
+                    price_responses.append(f"The price of {item_name.capitalize()} is ${base_price:.2f}")
+                else:
+                    price_responses.append(f"{item_name.capitalize()} is included with your order")
+            else:
+                price_responses.append(f"Sorry, I couldn't find pricing information for {item_name}")
+        else:
+            price_responses.append(f"Sorry, I couldn't find {item_name} in our menu")
+
+    # Clear the pending action
+    session.pop("pending_action", None)
+    # Update the session in the database
+    db.get_db()['Sessions'].replace_one({'session_id': session_id}, session, upsert=True)
+
+    return "\n".join(price_responses)
+
 def extract_modifications(user_input):
     modifications = defaultdict(list)
     
@@ -1458,6 +1548,7 @@ intent_handlers = {
     "show_menu": check_menu,
     "ask_options": provide_options,
     "nutrition_info": get_nutrition_info,
+    "check_price": check_price,
     "vegan_options": lambda sid, s, sen: random.choice(intents_dict['vegan_options']['responses']),
     "fallback": lambda sid, s, sen: random.choice(intents_dict['fallback']['responses'])
 }
@@ -1661,6 +1752,9 @@ def chat():
         elif action_type == "remove_order":
             response = handle_remove_order(session_id, session, sentence)
             responses.append(response)
+        elif action_type == "check_price":
+            response = check_price(session_id, session, sentence)
+            responses.append(response)
 
         missing_fields_response = check_missing_fields(session)
         if missing_fields_response:
@@ -1698,7 +1792,10 @@ def chat():
 
     # If we're here, either we're not fixing addons or addon extraction failed
     # Now handle interrupt intents
-    interrupt_intents = ["remove_order", "modify_order", "restart_order", "show_menu", "check_order", "ask_options", "reset_order", "nutrition_info"]
+    # NEW: Add check_price to interrupt_intents
+    interrupt_intents = ["remove_order", "modify_order", "restart_order", "show_menu", 
+                        "check_order", "ask_options", "reset_order", "nutrition_info", 
+                        "check_price"]
 
     if predicted_tag in interrupt_intents and confidence != "low":
         handler_function = intent_handlers.get(predicted_tag, intent_handlers["fallback"])

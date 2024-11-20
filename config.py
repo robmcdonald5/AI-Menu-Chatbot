@@ -49,17 +49,17 @@ CONFIDENCE_MARGIN = 0.1  # If top 2 scores are within this margin, reduce confid
 
 # Weights for different input lengths
 SHORT_INPUT_WEIGHTS = {
-    'cosine': 0.4,
-    'euclidean': 0.1,
+    'cosine': 0.3,
+    'euclidean': 0.2,
     'jaccard': 0.4,
     'wmd': 0.1
 }
 
 LONG_INPUT_WEIGHTS = {
-    'cosine': 0.3,
+    'cosine': 0.4,
     'euclidean': 0.2,
     'jaccard': 0.2,
-    'wmd': 0.3
+    'wmd': 0.2
 }
 
 # Legacy weights (kept for backward compatibility)
