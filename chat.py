@@ -392,7 +392,7 @@ def text2int(textnum):
         "one": 1, "two":2, "three":3, "four":4, "five":5,
         "six":6, "seven":7, "eight":8, "nine":9, "ten":10
     }
-    return num_words.get(textnum.lower(), 1)
+    return num_words.get(textnum.lower())
 
 # Function to extract field values using PhraseMatcher
 def extract_field_value(field, user_input):
@@ -688,41 +688,32 @@ def handle_remove_order(session_id, session, sentence):
 
 # Function to extract order IDs
 def extract_order_ids(input_sentence):
-   doc = nlp(input_sentence)
-   order_ids = []
-   
-   # Extract numerical entities
-   for ent in doc.ents:
-       if ent.label_ == 'CARDINAL':
-           try:
-               # First try direct integer conversion
-               order_ids.append(int(ent.text))
-           except ValueError:
-               # If that fails, try text2int
-               order_ids.append(text2int(ent.text))
+    doc = nlp(input_sentence)
+    order_ids = []
+    
+    # Extract numerical entities
+    for ent in doc.ents:
+        if ent.label_ == 'CARDINAL':
+            try:
+                order_ids.append(int(ent.text))
+            except ValueError:
+                num = text2int(ent.text)
+                if num is not None:
+                    order_ids.append(num)
 
-   # Use regex to find standalone numbers and text numbers
-   regex_ids = re.findall(r'\b(?:order\s*id\s*|order\s*number\s*|item\s*id\s*)?(\d+)\b', input_sentence, re.IGNORECASE)
-   for rid in regex_ids:
-       try:
-           order_ids.append(int(rid))
-       except ValueError:
-           continue
+    # Additionally, use regex to find standalone numbers possibly prefixed by keywords
+    regex_ids = re.findall(r'\b(?:order\s*id\s*|order\s*number\s*|item\s*id\s*)?(\d+)\b', input_sentence, re.IGNORECASE)
+    for rid in regex_ids:
+        try:
+            order_ids.append(int(rid))
+        except ValueError:
+            continue
 
-   # Check for text numbers
-   words = input_sentence.lower().split()
-   for word in words:
-       num = text2int(word)
-       if num != 1 or word.lower() == "one":  # Only append if valid conversion
-           order_ids.append(num)
+    # Remove duplicates and ensure all IDs are positive integers
+    order_ids = list(set([oid for oid in order_ids if oid > 0]))
+    order_ids.sort()
 
-   # Remove duplicates and ensure all IDs are positive integers
-   order_ids = list(set([oid for oid in order_ids if oid > 0]))
-   
-   # Sort the IDs for consistent ordering
-   order_ids.sort()
-   
-   return order_ids
+    return order_ids
 
 # Function to remove items by IDs
 def remove_items_by_ids_and_features(session_id, order_ids, features):
