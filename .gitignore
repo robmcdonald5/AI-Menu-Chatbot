@@ -15,6 +15,7 @@
 !heroku.yml
 !requirements.txt
 !Procfile
+!tester.py
 
 # Allow Git configuration and ignore rules
 !.gitignore
