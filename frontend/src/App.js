@@ -1,6 +1,7 @@
 //import logo from "./logo.svg";
 import "./App.css";
 import React, { useState, useEffect, useRef } from "react";
+import chipotleLogo from "./chipotle-logo.svg";
 import bowl from "./bowl.svg";
 import burrito from "./burrito.svg";
 import taco from "./taco.svg";
@@ -31,6 +32,7 @@ const OrderDetails = ({ orderDetails }) => {
 
   const imageSources = {
     bowl: bowl,
+    salad: bowl,
     burrito: burrito,
     taco: taco,
     quesadilla: quesadilla,
@@ -95,7 +97,12 @@ function App() {
   const [sessionId, setSessionId] = useState(null);
   const [orderDetails, setOrderDetails] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [menuItems, setMenuItems] = useState([]);
+  
+  const [isPopupVisible, setIsPopupVisible] = useState(false);
+
+  // State variables for recording
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef(null);
 
   // Initialize sessionId from localStorage when the component mounts
   useEffect(() => {
@@ -105,18 +112,7 @@ function App() {
     }
   }, []);
 
-  useEffect(() => {
-    const fetchMenuItems = async () => {
-      try {
-        const response = await axios.get('http://localhost:5000/get_menu_items');
-        setMenuItems(response.data.menu_items);
-      } catch (error) {
-        console.error('Error fetching menu items:', error);
-      }
-    };
-
-    fetchMenuItems();
-  }, []);
+  
 
   const fetchOrderDetails = async () => {
     try {
@@ -195,15 +191,140 @@ function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Speech-to-Text Handlers
+  const handleMicClick = () => {
+    if (!isRecording) {
+      // Start recording
+      if (
+        !("webkitSpeechRecognition" in window) &&
+        !("SpeechRecognition" in window)
+      ) {
+        alert(
+          "Your browser does not support speech recognition. Please use Chrome or Edge."
+        );
+        return;
+      }
+
+      const SpeechRecognition =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+
+      recognition.lang = "en-US"; // Set the language
+      recognition.continuous = false; // To keep the recognition running until the user stops it manually, set (adds errors right now)
+      recognition.interimResults = false; // If you want to display speech recognition results as the user is speaking, set true (adds errors right now)
+
+      recognitionRef.current = recognition;
+
+      recognition.onstart = () => {
+        setIsRecording(true);
+      };
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        setIsRecording(false);
+
+        // Simulate the message sending process
+        const userMessage = { text: transcript, sender: "user" };
+        setMessages((prev) => [...prev, userMessage]);
+
+        // Process the transcribed input
+        processUserInput(transcript);
+      };
+
+      recognition.onerror = (event) => {
+        console.error("Speech recognition error", event.error);
+        setIsRecording(false);
+        alert("Speech recognition error: " + event.error);
+      };
+
+      recognition.onend = () => {
+        setIsRecording(false);
+      };
+
+      recognition.start();
+    } else {
+      // Stop recording
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+        setIsRecording(false);
+      }
+    }
+  };
+
+  const processUserInput = async (transcript) => {
+    if (!transcript.trim()) {
+      return; // Don't send empty messages
+    }
+
+    try {
+      // Prepare the data to send
+      const dataToSend = {
+        message: transcript,
+        session_id: sessionId, // Include session_id in the request
+      };
+
+      const response = await axios.post(`${baseURL}/chat`, dataToSend);
+
+      const gptMessage = { text: response.data.response, sender: "chipotle" };
+      setMessages((prev) => [...prev, gptMessage]);
+
+      // Store session_id from the response if it's a new session or updated
+      if (response.data.session_id && response.data.session_id !== sessionId) {
+        setSessionId(response.data.session_id);
+        localStorage.setItem("session_id", response.data.session_id);
+      }
+    } catch (error) {
+      console.error("Error sending message:", error);
+      const errorMessage = {
+        text: "Sorry, there was an error. Please try again.",
+        sender: "chipotle",
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    }
+  };
+
+  const [isPopupOpen, setIsPopupOpen] = useState(false);
+
+  const togglePopup = () => {
+    setIsPopupOpen(!isPopupOpen);
+  };
+
+  const [menuItems, setMenuItems] = useState([]);
+  useEffect(() => {
+    const fetchMenuItems = async () => {
+      try {
+        const response = await axios.get(`${baseURL}/get_menu_items`);
+        setMenuItems(response.data.menu_items);
+      } catch (error) {
+        console.error("Error fetching menu items:", error);
+      }
+    };
+
+    fetchMenuItems();
+  }, []);
+
   return (
     <div className="h-screen relative">
       {/* Navbar */}
-      <div className="bg-[#441500] w-full py-4 px-6 flex justify-between items-center fixed top-0 left-0 right-0 z-10">
-        <div className="text-white text-2xl font-bold font-raleway">Chipotle</div>
-        
+      <div className="bg-gradient-to-b from-[#441500] to-[#5a1c0d] to-[#5a1c0d] w-full py-1 px-6 flex justify-between items-center fixed top-0 left-0 right-0 z-10">
+        <div className="flex items-center">
+          <img
+            src={chipotleLogo}
+            alt="Chipotle Logo"
+            className="h-16 mr-2 -ml-5"
+          />
+          <div className="text-white text-2xl font-bold font-raleway">
+            Chipotle
+          </div>
+          <button
+            onClick={togglePopup}
+            className="ml-4 bg-[#AC2318] hover:bg-red-800 text-white text-sm px-4 py-2 rounded-full shadow-lg"
+          >
+            Open Popup
+          </button>
+        </div>
       </div>
 
-      {/* Popup */}
       {showPopup && (
         <div
           className={`fixed inset-0 bg-black bg-opacity-75 backdrop-blur-md flex justify-center items-center z-20 transition-transform duration-500 ${
@@ -223,8 +344,23 @@ function App() {
         </div>
       )}
 
+      {isPopupOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 backdrop-blur-md flex justify-center items-center z-20">
+          <div className="bg-white font-raleway p-8 rounded-lg shadow-lg flex flex-col items-center justify-center">
+            <h2 className="text-4xl font-bold mb-4">{menuItems}</h2>
+           \
+            <button
+              onClick={togglePopup}
+              className="bg-[#AC2318] hover:bg-red-800 text-white text-lg px-4 py-2 rounded-full shadow-lg w-1/2"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Chat Content */}
-      <div className="flex flex-col h-screen bg-repeat bg-orange-50 heropattern-topography-orange-100 p-5 z-0 relative pt-20">
+      <div className="flex flex-col h-screen bg-chipotle-pattern bg-orange-50 bg-repeat  p-5 z-0 relative pt-20">
         {/* Chat Messages */}
         <div className="flex-1 overflow-auto mb-4">
           {messages.map((msg, idx) => (
@@ -237,7 +373,7 @@ function App() {
 
         <button
           onClick={toggleDropdown}
-          className="mb-2 p-2 bg-[#AC2318] text-white rounded-full shadow-lg"
+          className="mb-2 p-2 bg-[#AC2318] text-white rounded-full shadow-lg hover:bg-red-800"
         >
           {isDropdownOpen ? "Hide Current Order" : "Show Current Order"}
         </button>
@@ -253,6 +389,21 @@ function App() {
           </div>
         </div>
         <form onSubmit={handleSubmit} className="flex">
+          <button
+            type="button"
+            onClick={handleMicClick}
+            className={`mr-2 p-0 ${
+              isRecording
+                ? "bg-red-500 animate-pulse"
+                : "bg-[#AC2318] hover:bg-red-800"
+            } text-white rounded-full shadow-lg`}
+          >
+            <img
+              src="/mic-icon.png"
+              alt="Microphone Icon"
+              className="w-4 h-4 sm:w-8 sm:h-8 md:w-10 md:h-10 lg:w-12 lg:h-12"
+            />
+          </button>
           <input
             type="text"
             value={userInput}
@@ -262,7 +413,7 @@ function App() {
           />
           <button
             type="submit"
-            className="ml-2 p-2 bg-[#AC2318] text-white rounded-full shadow-lg"
+            className="ml-2 p-2 bg-[#AC2318] text-white rounded-full shadow-lg hover:bg-red-800"
           >
             <svg
               fill="#FFF"
@@ -334,8 +485,8 @@ function Message({ message }) {
         <div
           className={`p-3 rounded-xl max-w-xs text-lg ${
             sender === "user"
-              ? "bg-stone-300 text-slate-900 shadow-lg rounded-tr-none"
-              : "bg-[#441500] text-white shadow-lg rounded-tl-none"
+              ? "bg-stone-300 text-slate-900 shadow-xl rounded-tr-none"
+              : "bg-[#441500] text-white shadow-xl rounded-tl-none"
           }`}
         >
           {displayedText}
