@@ -8,11 +8,14 @@
 !chat.py
 !connect.py
 !database.py
+!fuzzer.py
+!config.py
 !intents.json
 !Dockerfile
 !heroku.yml
 !requirements.txt
 !Procfile
+!tester.py
 
 # Allow Git configuration and ignore rules
 !.gitignore

@@ -9,4 +9,5 @@ pysocks
 flask
 flask_cors
 waitress
-#gunicorn
+word2number
+Levenshtein

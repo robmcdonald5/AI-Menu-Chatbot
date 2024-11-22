@@ -1,8 +1,14 @@
-# db.py
 import os
 from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError
 import time
+import socks  # Import PySocks
+import socket
+from urllib.parse import urlparse
+#from dotenv import load_dotenv
+
+# Load environment variables from .env
+#load_dotenv()
 
 class Database:
     def __init__(self, db_name):
@@ -15,12 +21,30 @@ class Database:
         for attempt in range(3):
             try:
                 print(f"Attempting to connect to MongoDB (Attempt {attempt + 1})")
+
+                # Set up SOCKS5 proxy if QUOTAGUARDSTATIC_SOCKS5_URL is set
+                quotaguard_url = os.getenv('QUOTAGUARDSTATIC_SOCKS5_URL')
+                if quotaguard_url:
+                    parsed = urlparse(quotaguard_url)
+                    if parsed.scheme != 'socks5':
+                        raise ValueError(f"Unsupported proxy scheme {parsed.scheme}")
+                    socks.setdefaultproxy(
+                        socks.PROXY_TYPE_SOCKS5,
+                        parsed.hostname,
+                        parsed.port,
+                        True,  # rdns: Set to True to resolve DNS names through the proxy
+                        parsed.username,
+                        parsed.password
+                    )
+                    socket.socket = socks.socksocket  # Monkey patch socket module
+
                 self.client = MongoClient(
                     self.uri,
                     serverSelectionTimeoutMS=30000,
                     socketTimeoutMS=30000,
                     tls=True  # Ensure TLS is enabled
                 )
+
                 self.db = self.client[self.db_name]
                 # Force a connection to verify settings
                 self.client.admin.command('ping')
