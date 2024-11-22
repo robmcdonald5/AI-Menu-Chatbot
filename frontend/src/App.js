@@ -298,7 +298,7 @@ function App() {
       {/* Navbar */}
       <div className="bg-gradient-to-b from-[#441500] to-[#5a1c0d] to-[#5a1c0d] w-full py-1 px-6 flex justify-between items-center fixed top-0 left-0 right-0 z-10">
         <div className="flex items-center">
-          <img src={chipotleLogo} alt="Chipotle Logo" className="h-16 mr-2" />
+          <img src={chipotleLogo} alt="Chipotle Logo" className="h-16 mr-2 -ml-5" />
           <div className="text-white text-2xl font-bold font-raleway">Chipotle</div>
         </div>
       </div>
