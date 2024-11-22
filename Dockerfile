@@ -39,10 +39,10 @@ RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Install SpaCy model
-RUN python -m spacy download en_core_web_sm
+RUN python -m spacy download en_core_web_md
 
 # Install SentenceTransformer model during build
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-MiniLM-L6-v2')"
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-mpnet-base-v2')"
 
 # Set environment variable for SpaCy data path
 ENV SPACY_DATA=/usr/local/lib/python3.12/site-packages
