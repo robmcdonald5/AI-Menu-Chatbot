@@ -346,7 +346,6 @@ function App() {
           <div className="bg-orange-50 heropattern-topography-orange-100 font-raleway pl-4 rounded-t-lg shadow-lg flex flex-col  w-1/2 h-5/6 overflow-auto ">
             <div className="grid grid-cols-1 lg:grid-cols-2 w-full h-full overflow-auto pt-6">
               {menuItems.length > 0 ? (
-                // Group menu items by category
                 Object.entries(
                   menuItems.reduce((acc, item) => {
                     item.category.forEach((cat) => {
@@ -368,7 +367,12 @@ function App() {
                     </blockquote>
                     <ul className="marker:text-[#AC2318] list-disc text-xl pl-6 pb-4 font-semibold">
                       {items.map((item, idx) => (
-                        <li key={idx}>{item.name}</li>
+                        <li key={idx} className="flex justify-between items-center pr-6">
+                          <span>{item.name}</span>
+                          <span className="text-[#AC2318]">
+                            {item.price > 0 ? `$${item.price.toFixed(2)}` : 'No Extra'}
+                          </span>
+                        </li>
                       ))}
                     </ul>
                   </div>

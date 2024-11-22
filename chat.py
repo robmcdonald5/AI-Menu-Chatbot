@@ -658,7 +658,7 @@ def handle_remove_order(session_id, session, sentence):
             # Update the session in the database
             db.get_db()['Sessions'].replace_one({'session_id': session_id}, session, upsert=True)
 
-            return " ".join(removed_items) + " Anything else I can help with?"
+            return " ".join(removed_items)
         else:
             return "No valid items were removed from your order."
     else:
@@ -1588,16 +1588,34 @@ def get_order():
 
 @app.route('/get_menu_items', methods=['GET'])
 def get_menu_items():
-    menu_items = list(db.get_db().MenuItem.find({}, {"name": 1, "category": 1, "_id": 0}))
+    menu_items = list(db.get_db().MenuItem.find({}, {
+        "name": 1, 
+        "category": 1, 
+        "size_details": 1,
+        "_id": 0
+    }))
+    
+    processed_items = []
+    for item in menu_items:
+        # Get the base price from size_details if it exists
+        base_price = 0
+        if 'size_details' in item and item['size_details']:
+            base_price = item['size_details'][0].get('price', 0)
+        
+        processed_items.append({
+            "name": item['name'],
+            "category": item['category'],
+            "price": base_price
+        })
 
-    if DEBUG:
-        logger.debug(menu_items)
-    return jsonify({"menu_items": menu_items})
+    #if DEBUG:
+    #    logger.debug(processed_items)
+    #return jsonify({"menu_items": processed_items})
 
 @app.route('/chat', methods=['POST', 'OPTIONS'])
 def chat():
-    if request.method == 'OPTIONS':
-        return _build_cors_preflight_response()
+    #if request.method == 'OPTIONS':
+    #    return _build_cors_preflight_response()
     
     try:
         data = request.json
@@ -1893,6 +1911,6 @@ def health_check():
 
 
 ## Uncomment the following lines if you want to run the Flask app locally
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=DEBUG)
+#if __name__ == '__main__':
+#    port = int(os.environ.get("PORT", 5000))
+#    app.run(host='0.0.0.0', port=port, debug=DEBUG)
