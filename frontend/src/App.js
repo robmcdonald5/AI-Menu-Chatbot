@@ -97,6 +97,7 @@ function App() {
   const [orderDetails, setOrderDetails] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [menuItems, setMenuItems] = useState([]);
+  const [isPopupVisible, setIsPopupVisible] = useState(false);
 
   // State variables for recording
   const [isRecording, setIsRecording] = useState(false);
@@ -116,7 +117,7 @@ function App() {
         const response = await axios.get(`${baseURL}/get_menu_items`);
         setMenuItems(response.data.menu_items);
       } catch (error) {
-        console.error('Error fetching menu items:', error);
+        console.error("Error fetching menu items:", error);
       }
     };
 
@@ -296,11 +297,13 @@ function App() {
     <div className="h-screen relative">
       {/* Navbar */}
       <div className="bg-[#441500] w-full py-4 px-6 flex justify-between items-center fixed top-0 left-0 right-0 z-10">
-        <div className="text-white text-2xl font-bold font-raleway">Chipotle</div>
-        
+        <div className="text-white text-2xl font-bold font-raleway">
+          Chipotle
+        </div>
+       
       </div>
 
-      {/* Popup */}
+      
       {showPopup && (
         <div
           className={`fixed inset-0 bg-black bg-opacity-75 backdrop-blur-md flex justify-center items-center z-20 transition-transform duration-500 ${
@@ -350,7 +353,7 @@ function App() {
           </div>
         </div>
         <form onSubmit={handleSubmit} className="flex">
-        <button
+          <button
             type="button"
             onClick={handleMicClick}
             className={`mr-2 p-0 ${
