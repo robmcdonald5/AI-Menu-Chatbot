@@ -97,7 +97,7 @@ function App() {
   const [sessionId, setSessionId] = useState(null);
   const [orderDetails, setOrderDetails] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  
+
   const [isPopupVisible, setIsPopupVisible] = useState(false);
 
   // State variables for recording
@@ -111,8 +111,6 @@ function App() {
       setSessionId(storedSessionId);
     }
   }, []);
-
-  
 
   const fetchOrderDetails = async () => {
     try {
@@ -303,26 +301,25 @@ function App() {
     fetchMenuItems();
   }, []);
 
+
   return (
     <div className="h-screen relative">
       {/* Navbar */}
-      <div className="bg-gradient-to-b from-[#441500] to-[#5a1c0d] to-[#5a1c0d] w-full py-1 px-6 flex justify-between items-center fixed top-0 left-0 right-0 z-10">
-        <div className="flex items-center">
+      <div className="bg-[#441500] w-full px-6 flex justify-between items-center fixed top-0 left-0 right-0 z-10">
+        <div className="text-white text-2xl font-bold font-raleway flex items-center">
           <img
             src={chipotleLogo}
             alt="Chipotle Logo"
             className="h-16 mr-2 -ml-5"
           />
-          <div className="text-white text-2xl font-bold font-raleway">
-            Chipotle
-          </div>
-          <button
-            onClick={togglePopup}
-            className="ml-4 bg-[#AC2318] hover:bg-red-800 text-white text-sm px-4 py-2 rounded-full shadow-lg"
-          >
-            Open Popup
-          </button>
+          Chipotle
         </div>
+        <button
+          onClick={togglePopup}
+          className="ml-4 bg-[#441500] hover:bg-red-800 text-white text-sm px-4 py-2 rounded-full shadow-lg font-bold"
+        >
+          MENU
+        </button>
       </div>
 
       {showPopup && (
@@ -345,17 +342,48 @@ function App() {
       )}
 
       {isPopupOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 backdrop-blur-md flex justify-center items-center z-20">
-          <div className="bg-white font-raleway p-8 rounded-lg shadow-lg flex flex-col items-center justify-center">
-            <h2 className="text-4xl font-bold mb-4">{menuItems}</h2>
-           \
-            <button
-              onClick={togglePopup}
-              className="bg-[#AC2318] hover:bg-red-800 text-white text-lg px-4 py-2 rounded-full shadow-lg w-1/2"
-            >
-              Close
-            </button>
+        <div className="fixed inset-0 bg-black bg-opacity-75 backdrop-blur-md flex flex-col justify-center items-center z-20">
+          <div className="bg-orange-50 heropattern-topography-orange-100 font-raleway pl-4 rounded-t-lg shadow-lg flex flex-col  w-1/2 h-5/6 overflow-auto ">
+            <div className="grid grid-cols-1 lg:grid-cols-2 w-full h-full overflow-auto pt-6">
+              {menuItems.length > 0 ? (
+                // Group menu items by category
+                Object.entries(
+                  menuItems.reduce((acc, item) => {
+                    item.category.forEach((cat) => {
+                      if (!acc[cat]) acc[cat] = [];
+                      acc[cat].push(item);
+                    });
+                    return acc;
+                  }, {})
+                ).map(([category, items], index) => (
+                  <div key={index} className="mb-6">
+                    <blockquote className="text-4xl font-semibold italic text-center text-slate-900">
+                      <span className="before:block before:absolute before:-inset-1 before:-skew-y-3 before:bg-[#441500] relative inline-block py-2 px-4 mb-4">
+                        <span className="relative text-white">
+                          {category.toLowerCase() === "optionalside"
+                            ? "OPTIONAL SIDE"
+                            : category.toUpperCase()}
+                        </span>
+                      </span>
+                    </blockquote>
+                    <ul className="marker:text-[#AC2318] list-disc text-xl pl-6 pb-4 font-semibold">
+                      {items.map((item, idx) => (
+                        <li key={idx}>{item.name}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))
+              ) : (
+                <p>Loading menu items...</p>
+              )}
+            </div>
           </div>
+          <button
+            onClick={togglePopup}
+            className="bg-[#AC2318] hover:bg-red-800 text-white text-lg px-4 py-2 rounded-b-xl shadow-lg w-1/2 font-semibold"
+          >
+            Close
+          </button>
         </div>
       )}
 
