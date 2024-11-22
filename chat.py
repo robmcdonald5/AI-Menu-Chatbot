@@ -1588,29 +1588,82 @@ def get_order():
 
 @app.route('/get_menu_items', methods=['GET'])
 def get_menu_items():
-    menu_items = list(db.get_db().MenuItem.find({}, {
-        "name": 1, 
-        "category": 1, 
-        "size_details": 1,
-        "_id": 0
-    }))
-    
-    processed_items = []
-    for item in menu_items:
-        # Get the base price from size_details if it exists
-        base_price = 0
-        if 'size_details' in item and item['size_details']:
-            base_price = item['size_details'][0].get('price', 0)
-        
-        processed_items.append({
-            "name": item['name'],
-            "category": item['category'],
-            "price": base_price
-        })
+    try:
+        # Get database instance
+        db_instance = db.get_db()
+        if db_instance is None:  # Correct way to check database connection
+            logger.error("Database connection failed")
+            return jsonify({
+                "menu_items": [],
+                "error": "Database connection failed"
+            }), 500
 
-    #if DEBUG:
-    #    logger.debug(processed_items)
-    #return jsonify({"menu_items": processed_items})
+        # Log the collections in the database for debugging
+        try:
+            collections = db_instance.list_collection_names()
+            logger.debug(f"Available collections: {collections}")
+        except Exception as e:
+            logger.error(f"Error listing collections: {str(e)}")
+            return jsonify({
+                "menu_items": [],
+                "error": "Failed to list collections"
+            }), 500
+
+        # Attempt to fetch menu items
+        try:
+            menu_items = list(db_instance.MenuItem.find({}, {
+                "name": 1, 
+                "category": 1, 
+                "size_details": 1,
+                "_id": 0
+            }))
+        except Exception as e:
+            logger.error(f"Error querying MenuItem collection: {str(e)}")
+            return jsonify({
+                "menu_items": [],
+                "error": "Failed to query menu items"
+            }), 500
+
+        # Process menu items
+        processed_items = []
+        for item in menu_items:
+            try:
+                # Get base price from size_details if it exists
+                base_price = 0
+                if 'size_details' in item and item['size_details']:
+                    base_price = item['size_details'][0].get('price', 0)
+
+                processed_items.append({
+                    "name": item.get('name', 'Unknown Item'),
+                    "category": item.get('category', ['Uncategorized']),
+                    "price": base_price
+                })
+            except Exception as e:
+                logger.error(f"Error processing menu item {item}: {str(e)}")
+                continue
+
+        # Always return a response, even if empty
+        if len(processed_items) == 0:
+            logger.warning("No menu items found in database")
+            return jsonify({
+                "menu_items": [],
+                "message": "No menu items available"
+            }), 200
+
+        # Return successful response with items
+        return jsonify({
+            "menu_items": processed_items,
+            "count": len(processed_items)
+        }), 200
+
+    except Exception as e:
+        # Catch any other unexpected errors
+        logger.exception(f"Unexpected error in get_menu_items: {str(e)}")
+        return jsonify({
+            "menu_items": [],
+            "error": "Internal server error",
+            "details": str(e)
+        }), 500
 
 @app.route('/chat', methods=['POST', 'OPTIONS'])
 def chat():
