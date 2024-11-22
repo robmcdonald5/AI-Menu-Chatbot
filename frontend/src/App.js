@@ -1,6 +1,7 @@
 //import logo from "./logo.svg";
 import "./App.css";
 import React, { useState, useEffect, useRef } from "react";
+import chipotleLogo from "./chipotle-logo.svg";
 import bowl from "./bowl.svg";
 import burrito from "./burrito.svg";
 import taco from "./taco.svg";
@@ -295,9 +296,11 @@ function App() {
   return (
     <div className="h-screen relative">
       {/* Navbar */}
-      <div className="bg-[#441500] w-full py-4 px-6 flex justify-between items-center fixed top-0 left-0 right-0 z-10">
-        <div className="text-white text-2xl font-bold font-raleway">Chipotle</div>
-        
+      <div className="bg-gradient-to-b from-[#441500] to-[#5a1c0d] to-[#5a1c0d] w-full py-1 px-6 flex justify-between items-center fixed top-0 left-0 right-0 z-10">
+        <div className="flex items-center">
+          <img src={chipotleLogo} alt="Chipotle Logo" className="h-16 mr-2" />
+          <div className="text-white text-2xl font-bold font-raleway">Chipotle</div>
+        </div>
       </div>
 
       {/* Popup */}
@@ -321,7 +324,7 @@ function App() {
       )}
 
       {/* Main Chat Content */}
-      <div className="flex flex-col h-screen bg-repeat bg-orange-50 heropattern-topography-orange-100 p-5 z-0 relative pt-20">
+      <div className="flex flex-col h-screen bg-chipotle-pattern bg-repeat bg-orange-50 p-5 z-0 relative pt-20">
         {/* Chat Messages */}
         <div className="flex-1 overflow-auto mb-4">
           {messages.map((msg, idx) => (
@@ -334,7 +337,7 @@ function App() {
 
         <button
           onClick={toggleDropdown}
-          className="mb-2 p-2 bg-[#AC2318] text-white rounded-full shadow-lg"
+          className="mb-2 p-2 bg-[#AC2318] text-white rounded-full shadow-lg hover:bg-red-800"
         >
           {isDropdownOpen ? "Hide Current Order" : "Show Current Order"}
         </button>
@@ -354,7 +357,7 @@ function App() {
             type="button"
             onClick={handleMicClick}
             className={`mr-2 p-0 ${
-              isRecording ? "bg-red-500 animate-pulse" : "bg-[#AC2318]"
+              isRecording ? "bg-red-500 animate-pulse" : "bg-[#AC2318] hover:bg-red-800"
             } text-white rounded-full shadow-lg`}
           >
             <img
@@ -372,7 +375,7 @@ function App() {
           />
           <button
             type="submit"
-            className="ml-2 p-2 bg-[#AC2318] text-white rounded-full shadow-lg"
+            className="ml-2 p-2 bg-[#AC2318] text-white rounded-full shadow-lg hover:bg-red-800"
           >
             <svg
               fill="#FFF"
@@ -444,8 +447,8 @@ function Message({ message }) {
         <div
           className={`p-3 rounded-xl max-w-xs text-lg ${
             sender === "user"
-              ? "bg-stone-300 text-slate-900 shadow-lg rounded-tr-none"
-              : "bg-[#441500] text-white shadow-lg rounded-tl-none"
+              ? "bg-stone-300 text-slate-900 shadow-xl rounded-tr-none"
+              : "bg-[#441500] text-white shadow-xl rounded-tl-none"
           }`}
         >
           {displayedText}
