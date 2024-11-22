@@ -97,7 +97,7 @@ function App() {
   const [sessionId, setSessionId] = useState(null);
   const [orderDetails, setOrderDetails] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [menuItems, setMenuItems] = useState([]);
+  
   const [isPopupVisible, setIsPopupVisible] = useState(false);
 
   // State variables for recording
@@ -112,18 +112,7 @@ function App() {
     }
   }, []);
 
-  useEffect(() => {
-    const fetchMenuItems = async () => {
-      try {
-        const response = await axios.get(`${baseURL}/get_menu_items`);
-        setMenuItems(response.data.menu_items);
-      } catch (error) {
-        console.error("Error fetching menu items:", error);
-      }
-    };
-
-    fetchMenuItems();
-  }, []);
+  
 
   const fetchOrderDetails = async () => {
     try {
@@ -294,17 +283,48 @@ function App() {
     }
   };
 
+  const [isPopupOpen, setIsPopupOpen] = useState(false);
+
+  const togglePopup = () => {
+    setIsPopupOpen(!isPopupOpen);
+  };
+
+  const [menuItems, setMenuItems] = useState([]);
+  useEffect(() => {
+    const fetchMenuItems = async () => {
+      try {
+        const response = await axios.get(`${baseURL}/get_menu_items`);
+        setMenuItems(response.data.menu_items);
+      } catch (error) {
+        console.error("Error fetching menu items:", error);
+      }
+    };
+
+    fetchMenuItems();
+  }, []);
+
   return (
     <div className="h-screen relative">
       {/* Navbar */}
       <div className="bg-gradient-to-b from-[#441500] to-[#5a1c0d] to-[#5a1c0d] w-full py-1 px-6 flex justify-between items-center fixed top-0 left-0 right-0 z-10">
         <div className="flex items-center">
-          <img src={chipotleLogo} alt="Chipotle Logo" className="h-16 mr-2 -ml-5" />
-          <div className="text-white text-2xl font-bold font-raleway">Chipotle</div>
+          <img
+            src={chipotleLogo}
+            alt="Chipotle Logo"
+            className="h-16 mr-2 -ml-5"
+          />
+          <div className="text-white text-2xl font-bold font-raleway">
+            Chipotle
+          </div>
+          <button
+            onClick={togglePopup}
+            className="ml-4 bg-[#AC2318] hover:bg-red-800 text-white text-sm px-4 py-2 rounded-full shadow-lg"
+          >
+            Open Popup
+          </button>
         </div>
       </div>
 
-      
       {showPopup && (
         <div
           className={`fixed inset-0 bg-black bg-opacity-75 backdrop-blur-md flex justify-center items-center z-20 transition-transform duration-500 ${
@@ -324,8 +344,23 @@ function App() {
         </div>
       )}
 
+      {isPopupOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 backdrop-blur-md flex justify-center items-center z-20">
+          <div className="bg-white font-raleway p-8 rounded-lg shadow-lg flex flex-col items-center justify-center">
+            <h2 className="text-4xl font-bold mb-4">{menuItems}</h2>
+           \
+            <button
+              onClick={togglePopup}
+              className="bg-[#AC2318] hover:bg-red-800 text-white text-lg px-4 py-2 rounded-full shadow-lg w-1/2"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Chat Content */}
-      <div className="flex flex-col h-screen bg-chipotle-pattern bg-repeat bg-orange-50 p-5 z-0 relative pt-20">
+      <div className="flex flex-col h-screen bg-chipotle-pattern bg-orange-50 bg-repeat  p-5 z-0 relative pt-20">
         {/* Chat Messages */}
         <div className="flex-1 overflow-auto mb-4">
           {messages.map((msg, idx) => (
@@ -358,7 +393,9 @@ function App() {
             type="button"
             onClick={handleMicClick}
             className={`mr-2 p-0 ${
-              isRecording ? "bg-red-500 animate-pulse" : "bg-[#AC2318] hover:bg-red-800"
+              isRecording
+                ? "bg-red-500 animate-pulse"
+                : "bg-[#AC2318] hover:bg-red-800"
             } text-white rounded-full shadow-lg`}
           >
             <img

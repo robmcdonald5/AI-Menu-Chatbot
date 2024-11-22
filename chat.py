@@ -30,7 +30,8 @@ from fuzzer import MenuFuzzer  # Ensure fuzzer.py is in the same directory or in
 app = Flask(__name__, static_folder='frontend/build')  # Set static_folder to frontend/build
 
 # Updated CORS setup using config.py
-CORS(app, resources={r"/*": {"origins": config.CORS_ORIGINS}}, supports_credentials=True)
+CORS(app, resources={r"/*": {"origins": ["http://localhost:3000"]}}, supports_credentials=True)
+#CORS(app, resources={r"/*": {"origins": config.CORS_ORIGINS}}, supports_credentials=True)
 
 # Updated DEBUG flag using config.py
 DEBUG = config.DEBUG
@@ -1596,8 +1597,8 @@ def get_menu_items():
 
 @app.route('/chat', methods=['POST', 'OPTIONS'])
 def chat():
-    #if request.method == 'OPTIONS':
-    #    return _build_cors_preflight_response()
+    if request.method == 'OPTIONS':
+        return _build_cors_preflight_response()
     
     try:
         data = request.json
@@ -1832,14 +1833,14 @@ def chat():
 
 def _build_cors_preflight_response():
     response = jsonify({'status': 'OK'})
-    response.headers.add("Access-Control-Allow-Origin", "http://localhost:5001")
+    response.headers.add("Access-Control-Allow-Origin", "http://localhost:3000")
     response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
     response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
     response.headers.add('Access-Control-Allow-Credentials', 'true')
     return response
 
 def _corsify_actual_response(response):
-    response.headers.add("Access-Control-Allow-Origin", "http://localhost:5001")
+    response.headers.add("Access-Control-Allow-Origin", "http://localhost:3000")
     response.headers.add('Access-Control-Allow-Credentials', 'true')
     return response
 
