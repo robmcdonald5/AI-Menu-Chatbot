@@ -16,6 +16,7 @@
 !requirements.txt
 !Procfile
 !tester.py
+!train.py
 
 # Allow Git configuration and ignore rules
 !.gitignore
