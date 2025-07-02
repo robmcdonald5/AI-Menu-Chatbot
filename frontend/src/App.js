@@ -1,6 +1,6 @@
 //import logo from "./logo.svg";
 import "./App.css";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import chipotleLogo from "./chipotle-logo.svg";
 import bowl from "./bowl.svg";
 import burrito from "./burrito.svg";
@@ -9,10 +9,7 @@ import quesadilla from "./quesadilla.svg";
 import other from "./other.svg";
 import axios from "axios";
 
-const baseURL =
-  process.env.NODE_ENV === "production"
-    ? "https://chipotleaimenu.app"
-    : "http://localhost:5000";
+const baseURL = "http://localhost:5000";
 
 const OrderDetails = ({ orderDetails }) => {
   if (!Array.isArray(orderDetails)) {
@@ -98,7 +95,7 @@ function App() {
   const [orderDetails, setOrderDetails] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-  const [isPopupVisible, setIsPopupVisible] = useState(false);
+  
 
   // State variables for recording
   const [isRecording, setIsRecording] = useState(false);
@@ -112,7 +109,7 @@ function App() {
     }
   }, []);
 
-  const fetchOrderDetails = async () => {
+  const fetchOrderDetails = useCallback(async () => {
     try {
       const response = await axios.get(`${baseURL}/get_order`, {
         params: { session_id: sessionId },
@@ -122,11 +119,11 @@ function App() {
     } catch (error) {
       console.error("Error fetching order details:", error);
     }
-  };
+  }, [sessionId]);
 
   useEffect(() => {
     fetchOrderDetails();
-  }, [sessionId]);
+  }, [sessionId, fetchOrderDetails]);
 
   const handleContinue = () => {
     setSlideOff(true); // Start the slide animation
