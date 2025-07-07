@@ -21,6 +21,7 @@
 !data_visualization.py
 !profile_test.py
 !test_chat_integration.py
+!fine_tune_intents.py
 
 # Allow Git configuration and ignore rules
 !.gitignore
