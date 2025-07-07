@@ -28,7 +28,10 @@ def fine_tune_model():
             train_examples.append(InputExample(texts=[pattern], label=tag))
 
     # Map labels to integers for SoftmaxLoss
-    label_map = {label: i for i, label in enumerate(sorted(list(set([example.label for example in train_examples]))))}
+    label_map = {label: i for i, label in
+                 enumerate(sorted(list(set([example.label
+                                            for example in
+                                            train_examples]))))}
     for example in train_examples:
         example.label = label_map[example.label]
 
@@ -38,10 +41,13 @@ def fine_tune_model():
     model = SentenceTransformer(BASE_MODEL_NAME)
 
     # Define the DataLoader
-    train_dataloader = DataLoader(train_examples, shuffle=True, batch_size=TRAIN_BATCH_SIZE)
+    train_dataloader = DataLoader(train_examples, shuffle=True,
+                                  batch_size=TRAIN_BATCH_SIZE)
 
     # Define the loss function. SoftmaxLoss is suitable for classification tasks.
-    train_loss = losses.SoftmaxLoss(model=model, sentence_embedding_dimension=model.get_sentence_embedding_dimension(), num_labels=len(label_map))
+    train_loss = losses.SoftmaxLoss(model=model,
+                                    sentence_embedding_dimension=model.get_sentence_embedding_dimension(),
+                                    num_labels=len(label_map))
 
     print("Starting fine-tuning...")
     # Train the model
