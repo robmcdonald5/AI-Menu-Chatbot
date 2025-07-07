@@ -17,6 +17,10 @@
 !Procfile
 !tester.py
 !train.py
+!local_chat.py
+!data_visualization.py
+!profile_test.py
+!test_chat_integration.py
 
 # Allow Git configuration and ignore rules
 !.gitignore
